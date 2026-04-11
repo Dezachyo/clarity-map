@@ -300,6 +300,65 @@ input[type="range"].vertical {
   border-color: #0074D9;
 }
 
+/* ── Clarity legend ───────────────────────────────────────────────────────── */
+
+#clarity-legend {
+  position: fixed;
+  top: 120px; left: 12px;
+  z-index: 50;
+  background: rgba(232, 244, 248, 0.92);
+  border: 1px solid #b0cfe0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-family: 'Inter', sans-serif;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,80,140,0.1);
+}
+
+.legend-title {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #4a7a9b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.legend-inner {
+  display: flex;
+  gap: 5px;
+  align-items: stretch;
+}
+
+.legend-bar {
+  width: 12px;
+  height: 100px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: linear-gradient(to bottom,
+    rgb(220,240,255)   0%,    /* 40m */
+    rgb(150,210,245)  25%,    /* 30m */
+    rgb(50,140,210)   50%,    /* 20m */
+    rgb(20,80,160)    62.5%,  /* 15m */
+    rgb(10,25,80)     87.5%,  /* 5m  */
+    rgb(65,30,10)     100%    /* 0m  */
+  );
+}
+
+.legend-ticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100px;
+}
+
+.legend-ticks span {
+  font-size: 0.62rem;
+  color: #4a7a9b;
+  line-height: 1;
+}
+
 /* ── Heatmap toggle ───────────────────────────────────────────────────────── */
 
 #grid-toggle, #satellite-toggle {
