@@ -231,6 +231,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+  const ADMIN_KEY = "{{ admin_key }}";
+
   // ── Map setup ─────────────────────────────────────────────────────────────────
 
   const map = L.map('map', {
@@ -391,7 +393,7 @@
     try {
       const res = await fetch('/api/beaches', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY},
         body: JSON.stringify(beaches),
       });
       if (!res.ok) {
@@ -451,7 +453,10 @@
     btn.disabled = true;
     btn.textContent = 'Applying…';
     try {
-      const res = await fetch('/api/beaches/migration-apply', { method: 'POST' });
+      const res = await fetch('/api/beaches/migration-apply', {
+        method: 'POST',
+        headers: {'X-Admin-Key': ADMIN_KEY},
+      });
       const data = await res.json();
       showToast(`${data.updated} report${data.updated !== 1 ? 's' : ''} updated in sheet`, 'ok');
       dismissMigration();
