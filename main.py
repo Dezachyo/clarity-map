@@ -60,6 +60,10 @@ class BeachEntry(BaseModel):
 async def get_beaches():
     return json.loads(BEACHES_FILE.read_text())
 
+@app.get("/api/coastline")
+async def get_coastline():
+    return json.loads((BASE_DIR / "data" / "coast_israel.geojson").read_text())
+
 @app.post("/api/beaches")
 async def save_beaches(beaches: List[BeachEntry]):
     if not beaches:
