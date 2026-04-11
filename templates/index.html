@@ -10,7 +10,7 @@
 <body>
 
   <div id="map"></div>
-  <button id="grid-toggle" onclick="toggleGrid()">Grid: OFF</button>
+  <button id="grid-toggle" onclick="toggleGrid()">Clarity layer: OFF</button>
   <button id="satellite-toggle" onclick="toggleSatellite()">Satellite</button>
   <button id="beaches-toggle" onclick="toggleBeaches()">Beaches: ON</button>
 
@@ -45,11 +45,38 @@
 
   // ── Clarity colour helpers ────────────────────────────────────────────────────
 
+  // Multi-stop clarity gradient:
+  // 0m  → dark brown (muddy water)
+  // 5m  → dark navy
+  // 15m → medium blue
+  // 20m → bright blue
+  // 30m → very light blue
+  // 40m → near white
+  const CLARITY_STOPS = [
+    { v:  0, r:  65, g:  30, b:  10 },
+    { v:  5, r:  10, g:  25, b:  80 },
+    { v: 15, r:  20, g:  80, b: 160 },
+    { v: 20, r:  50, g: 140, b: 210 },
+    { v: 30, r: 150, g: 210, b: 245 },
+    { v: 40, r: 220, g: 240, b: 255 },
+  ];
+
+  function clarityRGB(m) {
+    const clamped = Math.max(0, Math.min(m, 40));
+    let lo = CLARITY_STOPS[0], hi = CLARITY_STOPS[CLARITY_STOPS.length - 1];
+    for (let i = 0; i < CLARITY_STOPS.length - 1; i++) {
+      if (clamped <= CLARITY_STOPS[i + 1].v) { lo = CLARITY_STOPS[i]; hi = CLARITY_STOPS[i + 1]; break; }
+    }
+    const t = hi.v === lo.v ? 0 : (clamped - lo.v) / (hi.v - lo.v);
+    return {
+      r: Math.round(lo.r + t * (hi.r - lo.r)),
+      g: Math.round(lo.g + t * (hi.g - lo.g)),
+      b: Math.round(lo.b + t * (hi.b - lo.b)),
+    };
+  }
+
   function clarityColor(m) {
-    const t = Math.min(m, 40) / 40;
-    const r = Math.round(0   + t * 127);
-    const g = Math.round(31  + t * (219 - 31));
-    const b = Math.round(63  + t * (255 - 63));
+    const { r, g, b } = clarityRGB(m);
     return `rgb(${r},${g},${b})`;
   }
 
@@ -96,10 +123,119 @@
   }
 
   const markersLayer = L.layerGroup().addTo(map);
-  const gridLayer = L.layerGroup();
   const beachLayer = L.layerGroup().addTo(map);
-  let gridVisible = false;
+  let clarityLayerVisible = false;
   let beachesVisible = true;
+
+  // ── Canvas-based IDW clarity layer ────────────────────────────────────────────
+
+  const ClarityHeatLayer = L.Layer.extend({
+    onAdd(map) {
+      this._map = map;
+      this._canvas = L.DomUtil.create('canvas', '', map.getPanes().overlayPane);
+      this._canvas.style.cssText = 'pointer-events:none;opacity:0.55;filter:blur(8px)';
+      if (!this._features) this._features = [];
+      map.on('moveend zoomend resize', this._reset, this);
+      this._reset();
+    },
+    onRemove(map) {
+      this._canvas.remove();
+      map.off('moveend zoomend resize', this._reset, this);
+    },
+    setFeatures(features) {
+      this._features = features;
+      if (this._map) this._reset();
+    },
+    setLandRings(rings) {
+      this._landRings = rings;
+    },
+    _reset() {
+      const map = this._map;
+      const size = map.getSize();
+      this._canvas.width  = size.x;
+      this._canvas.height = size.y;
+      // Position canvas so pixel (0,0) = container top-left, moves with overlayPane during pan
+      const topLeft = map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(this._canvas, topLeft);
+      this._draw();
+    },
+    _draw() {
+      const map = this._map;
+      const canvas = this._canvas;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const features = this._features;
+      if (!features || !features.length) return;
+
+      // Project reports to container pixels (aligns with canvas after setPosition)
+      const reports = features.map(f => {
+        const [lon, lat] = f.geometry.coordinates;
+        const pt = map.latLngToContainerPoint(L.latLng(lat, lon));
+        return { x: pt.x, y: pt.y, clarity: parseFloat(f.properties.clarity_m) || 0 };
+      });
+
+      // Influence radius: 25km in pixels
+      const center = map.getCenter();
+      const ptA = map.latLngToContainerPoint(L.latLng(center.lat - 0.5, center.lng));
+      const ptB = map.latLngToContainerPoint(L.latLng(center.lat + 0.5, center.lng));
+      const pxPer111km = Math.abs(ptA.y - ptB.y);
+      const influenceR  = (25 / 111) * pxPer111km;
+      const influenceR2 = influenceR * influenceR;
+
+      const STEP = 4;
+      const { width, height } = canvas;
+      const imageData = ctx.createImageData(width, height);
+      const data = imageData.data;
+
+      for (let py = 0; py < height; py += STEP) {
+        for (let px = 0; px < width; px += STEP) {
+          let wSum = 0, claritySum = 0;
+          for (const r of reports) {
+            const dx = px - r.x, dy = py - r.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= influenceR2) continue;
+            const w = 1 - Math.sqrt(d2) / influenceR;
+            wSum += w;
+            claritySum += w * r.clarity;
+          }
+          if (wSum < 0.05) continue;
+
+          const clarity = claritySum / wSum;
+          const { r: rC, g: gC, b: bC } = clarityRGB(clarity);
+
+          for (let oy = 0; oy < STEP && py + oy < height; oy++) {
+            for (let ox = 0; ox < STEP && px + ox < width; ox++) {
+              const i = ((py + oy) * width + (px + ox)) * 4;
+              data[i] = rC; data[i+1] = gC; data[i+2] = bC; data[i+3] = 200;
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+
+      // Erase land pixels using the coastline polygon
+      if (this._landRings && this._landRings.length) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'black';
+        for (const ring of this._landRings) {
+          ctx.beginPath();
+          let first = true;
+          for (const [lon, lat] of ring) {
+            const pt = map.latLngToContainerPoint(L.latLng(lat, lon));
+            if (first) { ctx.moveTo(pt.x, pt.y); first = false; }
+            else ctx.lineTo(pt.x, pt.y);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    },
+  });
+
+  const clarityHeatLayer = new ClarityHeatLayer();
 
   // ── Report position state (updated when depth slider changes) ────────────────
 
@@ -326,6 +462,7 @@
   // ── Load and display reports ──────────────────────────────────────────────────
 
   let allFeatures = [];
+  let currentFiltered = [];
   let currentWindow = 'today';
 
   async function loadReports() {
@@ -333,7 +470,6 @@
     const geojson = await res.json();
     allFeatures = geojson.features;
     applyWindow(currentWindow);
-    await loadGrid();
   }
 
   function getCutoff(window) {
@@ -351,6 +487,7 @@
       const dt = f.properties.dive_datetime;
       return dt && new Date(dt) >= cutoff;
     });
+    currentFiltered = filtered;
 
     markersLayer.clearLayers();
     filtered.forEach(f => {
@@ -385,6 +522,8 @@
       valEl.textContent   = `${mean.toFixed(1)} m`;
       countEl.textContent = `${filtered.length} dive${filtered.length !== 1 ? 's' : ''}`;
     }
+
+    if (clarityLayerVisible) clarityHeatLayer.setFeatures(filtered);
   }
 
   function setWindow(window, btn) {
@@ -467,34 +606,18 @@
     });
   }
 
-  // ── Grid overlay ──────────────────────────────────────────────────────────────
-
-  async function loadGrid() {
-    const res = await fetch('/api/grid');
-    const geojson = await res.json();
-
-    gridLayer.clearLayers();
-
-    geojson.features.forEach(f => {
-      const { mean_clarity, report_count } = f.properties;
-      L.geoJSON(f, {
-        style: {
-          color: 'transparent',
-          fillColor: clarityColor(mean_clarity),
-          fillOpacity: 0.35,
-          weight: 0,
-        },
-        interactive: false,
-      })
-      .addTo(gridLayer);
-    });
-  }
+  // ── Clarity layer toggle ──────────────────────────────────────────────────────
 
   function toggleGrid() {
-    gridVisible = !gridVisible;
-    gridVisible ? gridLayer.addTo(map) : map.removeLayer(gridLayer);
+    clarityLayerVisible = !clarityLayerVisible;
+    if (clarityLayerVisible) {
+      clarityHeatLayer.setFeatures(currentFiltered);
+      clarityHeatLayer.addTo(map);
+    } else {
+      map.removeLayer(clarityHeatLayer);
+    }
     document.getElementById('grid-toggle').textContent =
-      `Grid: ${gridVisible ? 'ON' : 'OFF'}`;
+      `Clarity layer: ${clarityLayerVisible ? 'ON' : 'OFF'}`;
   }
 
   // ── Beach markers ─────────────────────────────────────────────────────────────
@@ -534,15 +657,15 @@
       const icon = L.divIcon({
         className: '',
         html: `<div style="
-          background:#0074D9;color:white;
+          background:#cc2200;color:white;
           border:2px solid white;border-radius:50% 50% 50% 0;
           transform:rotate(-45deg);width:16px;height:16px;
-          box-shadow:0 2px 5px rgba(0,80,140,0.4);
+          box-shadow:0 2px 5px rgba(120,0,0,0.4);
         "></div>
         <div style="
-          position:absolute;top:18px;left:50%;transform:translateX(-50%);
+          position:absolute;top:-2px;left:20px;
           white-space:nowrap;
-          background:rgba(26,74,106,0.82);color:#e8f4f8;
+          background:rgba(100,10,0,0.78);color:#ffe8e5;
           font-size:0.65rem;font-family:inherit;
           padding:2px 5px;border-radius:4px;pointer-events:none;
         ">${b.name}</div>`,
@@ -600,9 +723,27 @@
   }
 
   async function init() {
-    const res = await fetch('/api/beaches');
-    BEACH_LIST = await res.json();
+    const [beachRes, coastRes] = await Promise.all([
+      fetch('/api/beaches'),
+      fetch('/api/coastline'),
+    ]);
+    BEACH_LIST = await beachRes.json();
     renderBeachMarkers();
+
+    // Extract land rings from coastline GeoJSON for canvas masking
+    const coastGeo = await coastRes.json();
+    const landRings = [];
+    const features = coastGeo.type === 'FeatureCollection' ? coastGeo.features : [coastGeo];
+    for (const feat of features) {
+      const geom = feat.geometry || feat;
+      if (geom.type === 'Polygon') {
+        landRings.push(geom.coordinates[0]);  // exterior ring
+      } else if (geom.type === 'MultiPolygon') {
+        for (const poly of geom.coordinates) landRings.push(poly[0]);
+      }
+    }
+    clarityHeatLayer.setLandRings(landRings);
+
     await loadReports();
   }
 
