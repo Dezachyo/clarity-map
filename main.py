@@ -10,18 +10,23 @@ Routes:
 """
 
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Header, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from typing import List
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from collections import defaultdict
 
@@ -30,12 +35,22 @@ import sheets
 
 GRID_SIZE = 0.05  # degrees ≈ 5 km per cell
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Clarity Map")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 BASE_DIR = Path(__file__).parent
 BEACHES_FILE = BASE_DIR / "data" / "beaches.json"
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+def verify_admin(x_admin_key: str = Header(default=None)):
+    """Require X-Admin-Key header when ADMIN_KEY env var is set."""
+    admin_key = os.getenv("ADMIN_KEY", "")
+    if admin_key and x_admin_key != admin_key:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
 
 # ── HTML pages ─────────────────────────────────────────────────────────────────
@@ -45,8 +60,11 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/admin/beaches", response_class=HTMLResponse)
-async def admin_beaches(request: Request):
-    return templates.TemplateResponse("admin_beaches.html", {"request": request})
+async def admin_beaches(request: Request, key: str = None):
+    admin_key = os.getenv("ADMIN_KEY", "")
+    if admin_key and key != admin_key:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
+    return templates.TemplateResponse("admin_beaches.html", {"request": request, "admin_key": key or ""})
 
 
 # ── Beaches API (read + write beaches.json) ────────────────────────────────────
@@ -65,7 +83,7 @@ async def get_coastline():
     return json.loads((BASE_DIR / "data" / "coast_israel.geojson").read_text())
 
 @app.post("/api/beaches")
-async def save_beaches(beaches: List[BeachEntry]):
+async def save_beaches(beaches: List[BeachEntry], _: None = Depends(verify_admin)):
     if not beaches:
         raise HTTPException(status_code=400, detail="Beach list cannot be empty")
     data = [b.model_dump() for b in beaches]
@@ -108,7 +126,7 @@ async def migration_preview():
     return {"changes": changes}
 
 @app.post("/api/beaches/migration-apply")
-async def migration_apply():
+async def migration_apply(_: None = Depends(verify_admin)):
     changes = _compute_migration_changes()
     if changes:
         sheets.update_rows_beach([(c["row"], c["new"]) for c in changes])
@@ -156,15 +174,26 @@ class ReportIn(BaseModel):
 
 
 @app.post("/api/report", status_code=201)
-async def submit_report(report: ReportIn):
+@limiter.limit("10/10minutes")
+async def submit_report(request: Request, report: ReportIn):
     """Validate and save a new dive report."""
     if not geo.is_in_sea(report.lat, report.lon):
         raise HTTPException(status_code=400, detail="Location is not in the sea")
 
     try:
-        datetime.fromisoformat(report.dive_datetime)
+        dive_dt = datetime.fromisoformat(report.dive_datetime)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid dive date/time format")
+
+    now = datetime.now()
+    if dive_dt > now + timedelta(hours=12):
+        raise HTTPException(status_code=422, detail="Dive time cannot be more than 12 hours in the future")
+    if dive_dt < now - timedelta(days=365):
+        raise HTTPException(status_code=422, detail="Dive time cannot be more than a year in the past")
+
+    valid_beach_names = {b["name"] for b in json.loads(BEACHES_FILE.read_text())}
+    if report.beach not in valid_beach_names:
+        raise HTTPException(status_code=422, detail=f"Unknown beach: {report.beach!r}")
 
     sheets.save_report(
         username=report.username,
