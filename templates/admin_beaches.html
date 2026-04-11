@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beach Editor — Clarity Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', sans-serif; }
+
+    #toolbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 52px;
+      z-index: 1000;
+      background: rgba(26, 74, 106, 0.95);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+
+    #toolbar h1 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #e8f4f8;
+      margin-right: auto;
+    }
+
+    .tb-btn {
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    #btn-add {
+      background: #27ae60;
+      color: white;
+    }
+    #btn-add:hover { background: #219a52; }
+    #btn-add.active { background: #e67e22; }
+
+    #btn-save {
+      background: #0074D9;
+      color: white;
+    }
+    #btn-save:hover { background: #005fa8; }
+    #btn-save:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    #btn-main {
+      background: rgba(255,255,255,0.12);
+      color: #cde8f5;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    #btn-main:hover { background: rgba(255,255,255,0.22); }
+
+    #status {
+      font-size: 0.75rem;
+      color: #7fc8e8;
+      min-width: 140px;
+      text-align: right;
+    }
+
+    #map {
+      position: fixed;
+      top: 52px; left: 0;
+      width: 100%;
+      height: calc(100% - 52px);
+      z-index: 1;
+    }
+
+    /* Migration panel */
+    #migration-panel {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 500;
+      background: rgba(26, 74, 106, 0.97);
+      backdrop-filter: blur(6px);
+      border-top: 1px solid rgba(255,255,255,0.15);
+      padding: 14px 20px 16px;
+      font-family: inherit;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+    }
+    #migration-panel.visible { transform: translateY(0); }
+
+    #migration-panel h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e8f4f8;
+      margin-bottom: 10px;
+    }
+
+    #migration-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      margin-bottom: 12px;
+    }
+    #migration-table th {
+      text-align: left;
+      color: #7fc8e8;
+      font-weight: 500;
+      padding: 3px 10px 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    #migration-table td {
+      padding: 4px 10px 4px 0;
+      color: #cde8f5;
+    }
+    #migration-table .old { color: #e88; text-decoration: line-through; }
+    #migration-table .new { color: #7de89a; }
+
+    #migration-none {
+      font-size: 0.8rem;
+      color: #7fc8e8;
+      margin-bottom: 12px;
+    }
+
+    #migration-actions { display: flex; gap: 10px; align-items: center; }
+
+    #btn-apply {
+      background: #27ae60;
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: 7px 18px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    #btn-apply:hover { background: #219a52; }
+    #btn-apply:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    #btn-dismiss {
+      background: transparent;
+      color: #7fc8e8;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 7px;
+      padding: 7px 14px;
+      font-size: 0.8rem;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    #btn-dismiss:hover { background: rgba(255,255,255,0.08); }
+
+    /* Popup */
+    .beach-popup input[type="text"] {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid #a0c4d8;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      margin-bottom: 8px;
+    }
+    .beach-popup input:focus { outline: none; border-color: #0074D9; }
+
+    .popup-actions { display: flex; gap: 6px; }
+
+    .popup-actions button {
+      flex: 1;
+      padding: 5px 0;
+      font-size: 0.78rem;
+      font-family: inherit;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-rename { background: #0074D9; color: white; }
+    .btn-rename:hover { background: #005fa8; }
+    .btn-delete { background: #e74c3c; color: white; }
+    .btn-delete:hover { background: #c0392b; }
+
+    .toast {
+      position: fixed;
+      bottom: 30px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 2000;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-family: inherit;
+      pointer-events: none;
+      animation: fadeout 2.5s ease forwards;
+    }
+    .toast.ok  { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .toast.err { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+    @keyframes fadeout {
+      0%   { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="toolbar">
+    <h1>Beach Editor</h1>
+    <span id="status">Loading…</span>
+    <button class="tb-btn" id="btn-add" onclick="toggleAddMode()">+ Add beach</button>
+    <button class="tb-btn" id="btn-save" onclick="saveBeaches()" disabled>Save</button>
+    <a href="/"><button class="tb-btn" id="btn-main">← Main map</button></a>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="migration-panel">
+    <h2>Re-snap old reports to updated beach names?</h2>
+    <div id="migration-none" style="display:none">All existing reports already match the current beach list.</div>
+    <table id="migration-table" style="display:none">
+      <thead><tr><th>Row</th><th>Old name</th><th>New name</th></tr></thead>
+      <tbody id="migration-tbody"></tbody>
+    </table>
+    <div id="migration-actions">
+      <button id="btn-apply" onclick="applyMigration()">Apply to sheet</button>
+      <button id="btn-dismiss" onclick="dismissMigration()">Dismiss</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  // ── Map setup ─────────────────────────────────────────────────────────────────
+
+  const map = L.map('map', {
+    center: [32.5, 34.85],
+    zoom: 9,
+    maxBounds: [[29.4, 33.8], [33.5, 36.0]],
+    maxBoundsViscosity: 0.8,
+  });
+
+  L.tileLayer('https://cdnil.govmap.gov.il/xyz/heb/{z}/{x}/{y}.png', {
+    attribution: '© מפת ישראל - govmap.gov.il',
+    maxZoom: 18,
+  }).addTo(map);
+
+  // ── State ─────────────────────────────────────────────────────────────────────
+
+  let beaches = [];       // [{name, lat, lon}] — working copy
+  let markers = [];       // parallel array of L.marker
+  let dirty = false;
+  let addMode = false;
+
+  // ── Marker helpers ────────────────────────────────────────────────────────────
+
+  function markerIcon(name) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        background:#0074D9;
+        color:white;
+        border:2px solid white;
+        border-radius:50% 50% 50% 0;
+        transform:rotate(-45deg);
+        width:22px;height:22px;
+        box-shadow:0 2px 6px rgba(0,80,140,0.4);
+      "></div>
+      <div style="
+        position:absolute;top:26px;left:50%;transform:translateX(-50%);
+        white-space:nowrap;
+        background:rgba(26,74,106,0.85);
+        color:#e8f4f8;
+        font-size:0.7rem;font-family:inherit;
+        padding:2px 6px;border-radius:4px;
+        pointer-events:none;
+      ">${name}</div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 22],
+      popupAnchor: [0, -28],
+    });
+  }
+
+  function buildPopup(idx) {
+    const b = beaches[idx];
+    const div = document.createElement('div');
+    div.className = 'beach-popup';
+    div.innerHTML = `
+      <input type="text" id="rename-input-${idx}" value="${b.name}" style="margin-top:4px">
+      <div class="popup-actions">
+        <button class="btn-rename" onclick="renameBeach(${idx})">Rename</button>
+        <button class="btn-delete" onclick="deleteBeach(${idx})">Delete</button>
+      </div>`;
+    return div;
+  }
+
+  function addMarker(idx) {
+    const b = beaches[idx];
+    const m = L.marker([b.lat, b.lon], {
+      draggable: true,
+      icon: markerIcon(b.name),
+    }).addTo(map);
+
+    m.bindPopup(() => buildPopup(idx), { minWidth: 180 });
+
+    m.on('dragend', () => {
+      const {lat, lng} = m.getLatLng();
+      beaches[idx].lat = parseFloat(lat.toFixed(6));
+      beaches[idx].lon = parseFloat(lng.toFixed(6));
+      markDirty();
+    });
+
+    markers[idx] = m;
+  }
+
+  function refreshMarker(idx) {
+    markers[idx].setIcon(markerIcon(beaches[idx].name));
+  }
+
+  // ── Rename / Delete ───────────────────────────────────────────────────────────
+
+  function renameBeach(idx) {
+    const input = document.getElementById(`rename-input-${idx}`);
+    const newName = input.value.trim();
+    if (!newName) return;
+    beaches[idx].name = newName;
+    refreshMarker(idx);
+    markers[idx].closePopup();
+    markDirty();
+  }
+
+  function deleteBeach(idx) {
+    markers[idx].remove();
+    markers.splice(idx, 1);
+    beaches.splice(idx, 1);
+    // Rebuild all markers so indices stay in sync
+    markers.forEach(m => m.remove());
+    markers = [];
+    beaches.forEach((_, i) => addMarker(i));
+    markDirty();
+  }
+
+  // ── Add mode ──────────────────────────────────────────────────────────────────
+
+  function toggleAddMode() {
+    addMode = !addMode;
+    const btn = document.getElementById('btn-add');
+    btn.textContent = addMode ? '✕ Cancel add' : '+ Add beach';
+    btn.classList.toggle('active', addMode);
+    map.getContainer().style.cursor = addMode ? 'crosshair' : '';
+  }
+
+  map.on('click', (e) => {
+    if (!addMode) return;
+    const name = prompt('Beach name:');
+    if (!name || !name.trim()) return;
+    const idx = beaches.length;
+    beaches.push({ name: name.trim(), lat: parseFloat(e.latlng.lat.toFixed(6)), lon: parseFloat(e.latlng.lng.toFixed(6)) });
+    addMarker(idx);
+    markDirty();
+    toggleAddMode();
+  });
+
+  // ── Dirty state ───────────────────────────────────────────────────────────────
+
+  function markDirty() {
+    dirty = true;
+    document.getElementById('btn-save').disabled = false;
+    setStatus(`${beaches.length} beaches — unsaved changes`);
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status').textContent = msg;
+  }
+
+  // ── Load ──────────────────────────────────────────────────────────────────────
+
+  async function loadBeaches() {
+    const res = await fetch('/api/beaches');
+    beaches = await res.json();
+    beaches.forEach((_, i) => addMarker(i));
+    setStatus(`${beaches.length} beaches`);
+  }
+
+  // ── Save ──────────────────────────────────────────────────────────────────────
+
+  async function saveBeaches() {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const res = await fetch('/api/beaches', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(beaches),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || 'Save failed', 'err');
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        return;
+      }
+      dirty = false;
+      showToast('Saved!', 'ok');
+      setStatus(`${beaches.length} beaches — saved`);
+      await loadMigrationPreview();
+    } catch {
+      showToast('Network error', 'err');
+      btn.disabled = false;
+    }
+    btn.textContent = 'Save';
+  }
+
+  // ── Migration panel ───────────────────────────────────────────────────────────
+
+  let pendingChanges = [];
+
+  async function loadMigrationPreview() {
+    const res = await fetch('/api/beaches/migration-preview');
+    const data = await res.json();
+    pendingChanges = data.changes;
+
+    const panel  = document.getElementById('migration-panel');
+    const none   = document.getElementById('migration-none');
+    const table  = document.getElementById('migration-table');
+    const tbody  = document.getElementById('migration-tbody');
+    const applyBtn = document.getElementById('btn-apply');
+
+    tbody.innerHTML = '';
+    if (pendingChanges.length === 0) {
+      none.style.display = 'block';
+      table.style.display = 'none';
+      applyBtn.style.display = 'none';
+    } else {
+      none.style.display = 'none';
+      table.style.display = 'table';
+      applyBtn.style.display = '';
+      pendingChanges.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${c.row - 1}</td><td class="old">${c.old}</td><td class="new">${c.new}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    panel.classList.add('visible');
+  }
+
+  async function applyMigration() {
+    const btn = document.getElementById('btn-apply');
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+    try {
+      const res = await fetch('/api/beaches/migration-apply', { method: 'POST' });
+      const data = await res.json();
+      showToast(`${data.updated} report${data.updated !== 1 ? 's' : ''} updated in sheet`, 'ok');
+      dismissMigration();
+    } catch {
+      showToast('Apply failed', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Apply to sheet';
+    }
+  }
+
+  function dismissMigration() {
+    document.getElementById('migration-panel').classList.remove('visible');
+    pendingChanges = [];
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────────
+
+  function showToast(msg, type) {
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2600);
+  }
+
+  // ── Warn on unsaved leave ─────────────────────────────────────────────────────
+
+  window.addEventListener('beforeunload', (e) => {
+    if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  loadBeaches();
+  </script>
+</body>
+</html>

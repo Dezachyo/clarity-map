@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clarity Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+  <div id="map"></div>
+  <button id="grid-toggle" onclick="toggleGrid()">Grid: OFF</button>
+  <button id="satellite-toggle" onclick="toggleSatellite()">Satellite</button>
+  <button id="beaches-toggle" onclick="toggleBeaches()">Beaches: ON</button>
+
+  <div id="stats-bar">
+    <div id="stats-header">
+      <div>
+        <div id="stats-label">Mean clarity</div>
+        <div id="stats-value">—</div>
+        <div id="stats-count"></div>
+      </div>
+      <button id="chart-toggle" onclick="toggleChart()" title="7-day chart">▾</button>
+    </div>
+    <div id="stats-buttons">
+      <button class="stats-btn active" onclick="setWindow('today', this)">Today</button>
+      <button class="stats-btn" onclick="setWindow(24, this)">24h</button>
+      <button class="stats-btn" onclick="setWindow(48, this)">48h</button>
+      <button class="stats-btn" onclick="setWindow(168, this)">7d</button>
+    </div>
+    <div id="chart-panel">
+      <div id="chart-title">Last 7 days — mean clarity per day</div>
+      <canvas id="clarity-chart"></canvas>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <script>
+  // ── Beach list (loaded from server) ──────────────────────────────────────────
+
+  let BEACH_LIST = [];
+
+  // ── Clarity colour helpers ────────────────────────────────────────────────────
+
+  function clarityColor(m) {
+    const t = Math.min(m, 40) / 40;
+    const r = Math.round(0   + t * 127);
+    const g = Math.round(31  + t * (219 - 31));
+    const b = Math.round(63  + t * (255 - 63));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function clarityOpacity(m) {
+    return 0.85 - (Math.min(m, 40) / 40) * 0.45;
+  }
+
+  // ── Map setup ─────────────────────────────────────────────────────────────────
+
+  const map = L.map('map', {
+    center: [32.5, 34.85],
+    zoom: 9,
+    maxBounds: [[29.4, 33.8], [33.5, 36.0]],
+    maxBoundsViscosity: 0.8,
+  });
+
+  const govmapLayer = L.tileLayer('https://cdnil.govmap.gov.il/xyz/heb/{z}/{x}/{y}.png', {
+    attribution: '© מפת ישראל - govmap.gov.il',
+    maxZoom: 18,
+  });
+
+  const satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      attribution: '© Esri, Maxar, Earthstar Geographics',
+      maxZoom: 18,
+    }
+  );
+
+  let satelliteVisible = false;
+  govmapLayer.addTo(map);
+
+  function toggleSatellite() {
+    satelliteVisible = !satelliteVisible;
+    if (satelliteVisible) {
+      map.removeLayer(govmapLayer);
+      satelliteLayer.addTo(map);
+    } else {
+      map.removeLayer(satelliteLayer);
+      govmapLayer.addTo(map);
+    }
+    document.getElementById('satellite-toggle').textContent =
+      satelliteVisible ? 'Map' : 'Satellite';
+  }
+
+  const markersLayer = L.layerGroup().addTo(map);
+  const gridLayer = L.layerGroup();
+  const beachLayer = L.layerGroup().addTo(map);
+  let gridVisible = false;
+  let beachesVisible = true;
+
+  // ── Report position state (updated when depth slider changes) ────────────────
+
+  let reportLat = null, reportLon = null;
+  let anchorLat = null, anchorLon = null;  // nearest beach coords
+  let anchorBearing = null;                // bearing from beach → click point
+
+  // Move a point from (lat,lon) along a bearing by distKm
+  function destinationPoint(lat, lon, bearingDeg, distKm) {
+    const R = 6371;
+    const d = distKm / R;
+    const b = bearingDeg * Math.PI / 180;
+    const lat1 = lat * Math.PI / 180;
+    const lon1 = lon * Math.PI / 180;
+    const lat2 = Math.asin(Math.sin(lat1)*Math.cos(d) + Math.cos(lat1)*Math.sin(d)*Math.cos(b));
+    const lon2 = lon1 + Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(lat1), Math.cos(d) - Math.sin(lat1)*Math.sin(lat2));
+    return [lat2 * 180/Math.PI, lon2 * 180/Math.PI];
+  }
+
+  function bearingBetween(lat1, lon1, lat2, lon2) {
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    lat1 = lat1 * Math.PI / 180; lat2 = lat2 * Math.PI / 180;
+    return Math.atan2(Math.sin(dLon)*Math.cos(lat2),
+      Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon)) * 180/Math.PI;
+  }
+
+  function onDepthChange(newDepth) {
+    document.getElementById('depth-val').textContent = newDepth;
+    if (anchorLat === null || anchorBearing === null) return;
+    const distKm = newDepth / 10;
+    [reportLat, reportLon] = destinationPoint(anchorLat, anchorLon, anchorBearing, distKm);
+    const coordEl = document.getElementById('form-coords');
+    if (coordEl) coordEl.textContent = `${reportLat.toFixed(4)}°N ${reportLon.toFixed(4)}°E`;
+  }
+
+  // ── Build form HTML (injected into Leaflet popup) ─────────────────────────────
+
+  function buildBeachOptions(selectedName) {
+    return BEACH_LIST.map(b =>
+      `<option value="${b.name}" ${b.name === selectedName ? 'selected' : ''}>${b.name}</option>`
+    ).join('');
+  }
+
+  function buildFormHTML(lat, lon, info) {
+    const depthVal = Math.round(info.depth_estimate || 0);
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const nowStr = now.toISOString().slice(0, 16);
+
+    return `
+    <div id="report-form">
+      <div id="form-header">
+        <span id="form-title">New Report</span>
+        <span id="form-coords">${lat.toFixed(4)}°N ${lon.toFixed(4)}°E</span>
+      </div>
+
+      <label>Nickname
+        <input type="text" id="f-username" maxlength="50" placeholder="Your diving name" required>
+      </label>
+
+      <label>Dive date & time
+        <input type="datetime-local" id="f-datetime" value="${nowStr}" required>
+      </label>
+
+      <label>Beach
+        <select id="f-beach" onchange="onBeachChange()">${buildBeachOptions(info.nearest_beach)}</select>
+      </label>
+
+      <div class="sliders-row">
+        <div class="slider-col">
+          <span class="slider-label">Depth</span>
+          <span class="slider-val" id="depth-val">${depthVal}</span>
+          <span class="slider-unit">m</span>
+          <div class="slider-track">
+            <input type="range" class="vertical" id="f-depth"
+                   min="0" max="200" step="1" value="${depthVal}"
+                   oninput="onDepthChange(parseInt(this.value))">
+          </div>
+        </div>
+        <div class="slider-col">
+          <span class="slider-label">Clarity</span>
+          <span class="slider-val" id="clarity-val">20</span>
+          <span class="slider-unit">m</span>
+          <div class="slider-track">
+            <input type="range" class="vertical" id="f-clarity"
+                   min="0" max="40" step="1" value="20"
+                   oninput="document.getElementById('clarity-val').textContent = this.value">
+            <div class="clarity-bar-v"></div>
+          </div>
+        </div>
+      </div>
+
+      <button id="submit-btn" onclick="submitReport()">Submit report</button>
+      <p id="form-error" class="error hidden"></p>
+    </div>`;
+  }
+
+  // ── Map click → open popup form ───────────────────────────────────────────────
+
+  let reportPopup = null;
+
+  map.on('click', async (e) => {
+    const {lat, lng} = e.latlng;
+
+    const res = await fetch(`/api/geo-info?lat=${lat}&lon=${lng}`);
+    const info = await res.json();
+
+    if (!info.is_sea) {
+      showToast('Please click on the sea to add a report.');
+      return;
+    }
+
+    // Store position state
+    reportLat = lat;
+    reportLon = lng;
+    anchorLat = info.nearest_beach_lat;
+    anchorLon = info.nearest_beach_lon;
+    anchorBearing = bearingBetween(anchorLat, anchorLon, lat, lng);
+
+    if (reportPopup) reportPopup.remove();
+
+    // Anchor the popup 220px below the click in screen space so the box
+    // opens southward and stays fully visible near the northern coast
+    const clickPx = map.project(e.latlng);
+    clickPx.y += 220;
+    const popupLatLng = map.unproject(clickPx);
+
+    reportPopup = L.popup({
+      className: 'report-popup',
+      maxWidth: 320,
+      closeButton: true,
+      autoClose: false,
+      closeOnClick: false,
+      autoPan: false,
+    })
+    .setLatLng(popupLatLng)
+    .setContent(buildFormHTML(lat, lng, info))
+    .openOn(map);
+  });
+
+  // ── Beach dropdown change → pan map ──────────────────────────────────────────
+
+  function onBeachChange() {
+    const sel = document.getElementById('f-beach');
+    const b = BEACH_LIST.find(x => x.name === sel.value);
+    if (b) map.panTo([b.lat, b.lon]);
+  }
+
+  // ── Submit ────────────────────────────────────────────────────────────────────
+
+  async function submitReport() {
+    const lat = reportLat, lon = reportLon;
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    if (!lat || !lon) {
+      showFormError('No location — click on the sea first');
+      btn.disabled = false;
+      btn.textContent = 'Submit report';
+      return;
+    }
+
+    const payload = {
+      username:      document.getElementById('f-username').value.trim(),
+      dive_datetime: document.getElementById('f-datetime').value,
+      clarity_m:     parseFloat(document.getElementById('f-clarity').value),
+      beach:         document.getElementById('f-beach').value,
+      depth_m:       parseFloat(document.getElementById('f-depth').value),
+      lat, lon,
+    };
+
+    if (!payload.username) {
+      showFormError('Please enter a nickname');
+      btn.disabled = false;
+      btn.textContent = 'Submit report';
+      return;
+    }
+
+    if (new Date(payload.dive_datetime) > new Date()) {
+      showFormError('Dive time cannot be in the future');
+      btn.disabled = false;
+      btn.textContent = 'Submit report';
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/report', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showFormError(err.detail || 'Submission failed');
+        btn.disabled = false;
+        btn.textContent = 'Submit report';
+      } else {
+        if (reportPopup) { reportPopup.remove(); reportPopup = null; }
+        const rRes = await fetch('/api/reports');
+        allFeatures = (await rRes.json()).features;
+        applyWindow(currentWindow);
+      }
+    } catch {
+      showFormError('Network error — please try again');
+      btn.disabled = false;
+      btn.textContent = 'Submit report';
+    }
+  }
+
+  function showFormError(msg) {
+    const el = document.getElementById('form-error');
+    if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+  }
+
+  function showToast(msg) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+  }
+
+  // ── Load and display reports ──────────────────────────────────────────────────
+
+  let allFeatures = [];
+  let currentWindow = 'today';
+
+  async function loadReports() {
+    const res = await fetch('/api/reports');
+    const geojson = await res.json();
+    allFeatures = geojson.features;
+    applyWindow(currentWindow);
+    await loadGrid();
+  }
+
+  function getCutoff(window) {
+    if (window === 'today') {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    return new Date(Date.now() - window * 3600 * 1000);
+  }
+
+  function applyWindow(window) {
+    const cutoff = getCutoff(window);
+    const filtered = allFeatures.filter(f => {
+      const dt = f.properties.dive_datetime;
+      return dt && new Date(dt) >= cutoff;
+    });
+
+    markersLayer.clearLayers();
+    filtered.forEach(f => {
+      const [lon, lat] = f.geometry.coordinates;
+      const p = f.properties;
+      const clarity = parseFloat(p.clarity_m) || 0;
+      L.circleMarker([lat, lon], {
+        radius: 8,
+        color: clarityColor(clarity),
+        fillColor: clarityColor(clarity),
+        fillOpacity: clarityOpacity(clarity),
+        weight: 1.5,
+      })
+      .bindPopup(`
+        <b>${p.beach}</b><br>
+        Clarity: <b>${clarity} m</b><br>
+        Depth: ${p.depth_m} m<br>
+        Diver: ${p.username}<br>
+        ${p.dive_datetime ? p.dive_datetime.replace('T', ' ') : ''}
+      `)
+      .addTo(markersLayer);
+    });
+
+    // Update stats bar
+    const valEl   = document.getElementById('stats-value');
+    const countEl = document.getElementById('stats-count');
+    if (filtered.length === 0) {
+      valEl.textContent   = '—';
+      countEl.textContent = 'No reports';
+    } else {
+      const mean = filtered.reduce((s, f) => s + (parseFloat(f.properties.clarity_m) || 0), 0) / filtered.length;
+      valEl.textContent   = `${mean.toFixed(1)} m`;
+      countEl.textContent = `${filtered.length} dive${filtered.length !== 1 ? 's' : ''}`;
+    }
+  }
+
+  function setWindow(window, btn) {
+    currentWindow = window;
+    document.querySelectorAll('.stats-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyWindow(window);
+  }
+
+  // ── 7-day clarity chart ───────────────────────────────────────────────────────
+
+  let clarityChart = null;
+  let chartOpen = false;
+
+  function toggleChart() {
+    chartOpen = !chartOpen;
+    document.getElementById('chart-panel').classList.toggle('open', chartOpen);
+    document.getElementById('chart-toggle').classList.toggle('open', chartOpen);
+    if (chartOpen) renderChart();
+  }
+
+  function renderChart() {
+    const days = 7;
+    const labels = [];
+    const means  = [];
+    const colors = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+
+      const dayFeatures = allFeatures.filter(f => {
+        const dt = new Date(f.properties.dive_datetime);
+        return dt >= d && dt < next;
+      });
+
+      const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
+      labels.push(label);
+
+      if (dayFeatures.length === 0) {
+        means.push(null);
+        colors.push('rgba(176, 207, 224, 0.4)');
+      } else {
+        const mean = dayFeatures.reduce((s, f) => s + (parseFloat(f.properties.clarity_m) || 0), 0) / dayFeatures.length;
+        means.push(parseFloat(mean.toFixed(1)));
+        colors.push(clarityColor(mean));
+      }
+    }
+
+    const ctx = document.getElementById('clarity-chart').getContext('2d');
+    if (clarityChart) clarityChart.destroy();
+    clarityChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: means,
+          backgroundColor: colors,
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { font: { size: 9, family: 'Inter' }, color: '#4a7a9b' }, grid: { display: false } },
+          y: {
+            min: 0,
+            suggestedMax: Math.ceil((Math.max(...means.filter(v => v !== null)) * 1.2) / 5) * 5,
+            ticks: { font: { size: 9, family: 'Inter' }, color: '#4a7a9b',
+                     callback: v => v + 'm' },
+            grid: { color: 'rgba(176,207,224,0.3)' },
+          },
+        },
+        animation: { duration: 300 },
+      },
+    });
+  }
+
+  // ── Grid overlay ──────────────────────────────────────────────────────────────
+
+  async function loadGrid() {
+    const res = await fetch('/api/grid');
+    const geojson = await res.json();
+
+    gridLayer.clearLayers();
+
+    geojson.features.forEach(f => {
+      const { mean_clarity, report_count } = f.properties;
+      L.geoJSON(f, {
+        style: {
+          color: 'transparent',
+          fillColor: clarityColor(mean_clarity),
+          fillOpacity: 0.35,
+          weight: 0,
+        },
+        interactive: false,
+      })
+      .addTo(gridLayer);
+    });
+  }
+
+  function toggleGrid() {
+    gridVisible = !gridVisible;
+    gridVisible ? gridLayer.addTo(map) : map.removeLayer(gridLayer);
+    document.getElementById('grid-toggle').textContent =
+      `Grid: ${gridVisible ? 'ON' : 'OFF'}`;
+  }
+
+  // ── Beach markers ─────────────────────────────────────────────────────────────
+
+  let beachChart = null;
+
+  function beachChartData(beachName) {
+    const labels = [], means = [], colors = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+
+      const dayFeatures = allFeatures.filter(f => {
+        const dt = new Date(f.properties.dive_datetime);
+        return f.properties.beach === beachName && dt >= d && dt < next;
+      });
+
+      labels.push(d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }));
+      if (dayFeatures.length === 0) {
+        means.push(null);
+        colors.push('rgba(176, 207, 224, 0.4)');
+      } else {
+        const mean = dayFeatures.reduce((s, f) => s + (parseFloat(f.properties.clarity_m) || 0), 0) / dayFeatures.length;
+        means.push(parseFloat(mean.toFixed(1)));
+        colors.push(clarityColor(mean));
+      }
+    }
+    return { labels, means, colors };
+  }
+
+  function renderBeachMarkers() {
+    beachLayer.clearLayers();
+    BEACH_LIST.forEach(b => {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="
+          background:#0074D9;color:white;
+          border:2px solid white;border-radius:50% 50% 50% 0;
+          transform:rotate(-45deg);width:16px;height:16px;
+          box-shadow:0 2px 5px rgba(0,80,140,0.4);
+        "></div>
+        <div style="
+          position:absolute;top:18px;left:50%;transform:translateX(-50%);
+          white-space:nowrap;
+          background:rgba(26,74,106,0.82);color:#e8f4f8;
+          font-size:0.65rem;font-family:inherit;
+          padding:2px 5px;border-radius:4px;pointer-events:none;
+        ">${b.name}</div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 16],
+      });
+
+      const canvasId = `beach-chart-${b.name.replace(/\s+/g, '-')}`;
+      const popup = L.popup({ maxWidth: 220, className: 'beach-chart-popup' })
+        .setContent(`
+          <div style="font-size:0.8rem;font-weight:600;color:#1a4a6a;margin-bottom:6px">${b.name}</div>
+          <div style="font-size:0.65rem;color:#4a7a9b;margin-bottom:6px">Last 7 days — mean clarity</div>
+          <canvas id="${canvasId}" width="190" height="110"></canvas>
+        `);
+
+      const marker = L.marker([b.lat, b.lon], { icon }).addTo(beachLayer);
+      marker.bindPopup(popup);
+
+      marker.on('popupopen', () => {
+        const { labels, means, colors } = beachChartData(b.name);
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        if (beachChart) beachChart.destroy();
+        const validMeans = means.filter(v => v !== null);
+        const yMax = validMeans.length
+          ? Math.ceil((Math.max(...validMeans) * 1.2) / 5) * 5
+          : 20;
+        beachChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{ data: means, backgroundColor: colors, borderRadius: 3, borderSkipped: false }],
+          },
+          options: {
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { font: { size: 8, family: 'Inter' }, color: '#4a7a9b' }, grid: { display: false } },
+              y: {
+                min: 0, suggestedMax: yMax,
+                ticks: { font: { size: 8, family: 'Inter' }, color: '#4a7a9b', callback: v => v + 'm' },
+                grid: { color: 'rgba(176,207,224,0.3)' },
+              },
+            },
+            animation: { duration: 200 },
+          },
+        });
+      });
+    });
+  }
+
+  function toggleBeaches() {
+    beachesVisible = !beachesVisible;
+    beachesVisible ? beachLayer.addTo(map) : map.removeLayer(beachLayer);
+    document.getElementById('beaches-toggle').textContent =
+      `Beaches: ${beachesVisible ? 'ON' : 'OFF'}`;
+  }
+
+  async function init() {
+    const res = await fetch('/api/beaches');
+    BEACH_LIST = await res.json();
+    renderBeachMarkers();
+    await loadReports();
+  }
+
+  init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+[
+  {
+    "name": "Rosh HaNikra",
+    "lat": 33.0875,
+    "lon": 35.1008
+  },
+  {
+    "name": "Achziv",
+    "lat": 33.0497,
+    "lon": 35.096
+  },
+  {
+    "name": "Nahariya",
+    "lat": 33.005,
+    "lon": 35.0887
+  },
+  {
+    "name": "Acre",
+    "lat": 32.9248,
+    "lon": 35.0653
+  },
+  {
+    "name": "Bat Galim",
+    "lat": 32.838,
+    "lon": 34.9849
+  },
+  {
+    "name": "Atlit",
+    "lat": 32.6947,
+    "lon": 34.9432
+  },
+  {
+    "name": "Dor-HaBonim",
+    "lat": 32.6147,
+    "lon": 34.921
+  },
+  {
+    "name": "Caesarea",
+    "lat": 32.492678,
+    "lon": 34.890862
+  },
+  {
+    "name": "Herzliya",
+    "lat": 32.164,
+    "lon": 34.7947
+  },
+  {
+    "name": "Tel Aviv",
+    "lat": 32.0965,
+    "lon": 34.7714
+  },
+  {
+    "name": "Yafo",
+    "lat": 32.0519,
+    "lon": 34.7504
+  },
+  {
+    "name": "Palmachim",
+    "lat": 31.9215,
+    "lon": 34.7019
+  },
+  {
+    "name": "Ashdod",
+    "lat": 31.7942,
+    "lon": 34.6395
+  },
+  {
+    "name": "Ashkelon",
+    "lat": 31.6601,
+    "lon": 34.544
+  },
+  {
+    "name": "Zikim Beach",
+    "lat": 31.612,
+    "lon": 34.5258
+  },
+  {
+    "name": "Michmoret",
+    "lat": 32.401704,
+    "lon": 34.867859
+  },
+  {
+    "name": "Gador",
+    "lat": 32.432208,
+    "lon": 34.876399
+  }
+]
