@@ -141,10 +141,10 @@ html, body {
 }
 
 input[type="range"].vertical {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  height: 90px;
-  width: 22px;
+  writing-mode: horizontal-tb;
+  transform: rotate(90deg);
+  width: 90px;
+  height: 22px;
   cursor: pointer;
   accent-color: #0074D9;
 }
@@ -153,7 +153,7 @@ input[type="range"].vertical {
   width: 8px;
   height: 90px;
   border-radius: 4px;
-  background: linear-gradient(to top, #001f3f, #0074D9, #7FDBFF);
+  background: linear-gradient(to bottom, #001f3f, #0074D9, #7FDBFF);
   flex-shrink: 0;
 }
 
