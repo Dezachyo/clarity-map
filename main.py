@@ -162,12 +162,9 @@ async def submit_report(report: ReportIn):
         raise HTTPException(status_code=400, detail="Location is not in the sea")
 
     try:
-        dive_dt = datetime.fromisoformat(report.dive_datetime)
+        datetime.fromisoformat(report.dive_datetime)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid dive date/time format")
-
-    if dive_dt > datetime.now():
-        raise HTTPException(status_code=400, detail="Dive time cannot be in the future")
 
     sheets.save_report(
         username=report.username,

@@ -508,7 +508,7 @@
         Clarity: <b>${clarity} m</b><br>
         Depth: ${p.depth_m} m<br>
         Diver: ${p.username}<br>
-        ${p.dive_datetime ? p.dive_datetime.replace('T', ' ') : ''}
+        ${p.dive_datetime ? p.dive_datetime.split('T')[1]?.slice(0, 5) ?? p.dive_datetime : ''}
       `)
       .addTo(markersLayer);
     });
