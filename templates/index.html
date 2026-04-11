@@ -10,7 +10,7 @@
 <body>
 
   <div id="map"></div>
-  <button id="grid-toggle" onclick="toggleGrid()">Clarity layer: OFF</button>
+  <button id="grid-toggle" onclick="toggleGrid()">Clarity layer: ON</button>
   <button id="satellite-toggle" onclick="toggleSatellite()">Satellite</button>
   <button id="beaches-toggle" onclick="toggleBeaches()">Beaches: ON</button>
 
@@ -124,7 +124,7 @@
 
   const markersLayer = L.layerGroup().addTo(map);
   const beachLayer = L.layerGroup().addTo(map);
-  let clarityLayerVisible = false;
+  let clarityLayerVisible = true;
   let beachesVisible = true;
 
   // ── Canvas-based IDW clarity layer ────────────────────────────────────────────
@@ -745,6 +745,7 @@
       }
     }
     clarityHeatLayer.setLandRings(landRings);
+    clarityHeatLayer.addTo(map);
 
     await loadReports();
   }
