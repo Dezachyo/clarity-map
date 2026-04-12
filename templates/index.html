@@ -38,8 +38,8 @@
       <button id="chart-toggle" onclick="toggleChart()" title="7-day chart">▾</button>
     </div>
     <div id="stats-buttons">
-      <button class="stats-btn active" onclick="setWindow('today', this)">Today</button>
-      <button class="stats-btn" onclick="setWindow(24, this)">24h</button>
+      <button class="stats-btn" onclick="setWindow('today', this)">Today</button>
+      <button class="stats-btn active" onclick="setWindow(24, this)">24h</button>
       <button class="stats-btn" onclick="setWindow(48, this)">48h</button>
       <button class="stats-btn" onclick="setWindow(168, this)">7d</button>
     </div>
@@ -479,7 +479,7 @@
 
   let allFeatures = [];
   let currentFiltered = [];
-  let currentWindow = 'today';
+  let currentWindow = 24;
 
   async function loadReports() {
     const res = await fetch('/api/reports');
