@@ -24,7 +24,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
 ]
 
-COLUMNS = ["username", "submitted_at", "dive_datetime", "clarity_m", "beach", "depth_m", "lat", "lon"]
+COLUMNS = ["username", "submitted_at", "dive_datetime", "clarity_m", "beach", "depth_m", "lat", "lon", "delete_token"]
 HEADER_ROW = COLUMNS  # row 1 of the sheet
 BEACH_COL = COLUMNS.index("beach") + 1  # 1-based column index for gspread
 
@@ -54,10 +54,16 @@ def _get_sheet():
     spreadsheet = client.open_by_key(sheet_id)
     worksheet = spreadsheet.sheet1
 
-    # Ensure header row exists
+    # Ensure header row exists and contains all expected columns
     existing = worksheet.row_values(1)
-    if existing != HEADER_ROW:
+    if not existing:
         worksheet.insert_row(HEADER_ROW, index=1)
+    else:
+        # Add any missing columns to the end (schema migration, safe for existing sheets)
+        for col in HEADER_ROW:
+            if col not in existing:
+                worksheet.update_cell(1, len(existing) + 1, col)
+                existing.append(col)
 
     return worksheet
 
@@ -71,26 +77,50 @@ def get_all_reports() -> list[dict]:
 
 def save_report(
     username: str,
+    submitted_at: str,
     dive_datetime: str,
     clarity_m: float,
     beach: str,
     depth_m: float,
     lat: float,
     lon: float,
+    delete_token: str,
 ) -> None:
     """Append a new report row to the sheet."""
     sheet = _get_sheet()
     row = [
         username,
-        datetime.now(timezone.utc).isoformat(timespec="seconds"),  # submitted_at
+        submitted_at,
         dive_datetime,
         clarity_m,
         beach,
         depth_m,
         lat,
         lon,
+        delete_token,
     ]
     sheet.append_row(row, value_input_option="USER_ENTERED")
+
+
+def delete_report(submitted_at: str, delete_token: str) -> bool:
+    """Delete a report row by submitted_at + delete_token. Returns True if deleted."""
+    sheet = _get_sheet()
+    rows = sheet.get_all_values()
+    if not rows:
+        return False
+    header = rows[0]
+    try:
+        sat_i = header.index("submitted_at")
+        tok_i = header.index("delete_token")
+    except ValueError:
+        return False
+    for i, row in enumerate(rows[1:], start=2):
+        row_sat = row[sat_i] if len(row) > sat_i else ""
+        row_tok = row[tok_i] if len(row) > tok_i else ""
+        if row_sat == submitted_at and row_tok == delete_token and row_tok != "":
+            sheet.delete_rows(i)
+            return True
+    return False
 
 
 def _get_weather_sheet():
