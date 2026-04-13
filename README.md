@@ -20,7 +20,7 @@ Water clarity reporting app for Israeli Mediterranean coast divers. Users submit
 
 ## Data Model
 
-Reports are stored in a Google Sheet with these columns:
+### Dive reports (`Sheet1`)
 
 ```
 username | submitted_at | dive_datetime | clarity_m | beach | depth_m | lat | lon
@@ -30,6 +30,21 @@ username | submitted_at | dive_datetime | clarity_m | beach | depth_m | lat | lo
 - `dive_datetime` — user-set dive time (can be in the past, defaults to now)
 - `clarity_m` — water clarity in meters (0–40, slider input)
 - `depth_m` — dive depth in meters (auto-estimated or user-set)
+
+### Weather forecasts (`windguru_forecasts` worksheet)
+
+```
+scrape_timestamp | forecast_datetime | wind_speed | gust_speed | wind_dir | swell_height | swell_period | swell_dir | station_id | station_name
+```
+
+Scraped hourly from [Windguru](https://www.windguru.cz) using two GFS models:
+
+| Field | Source model | Windguru model ID |
+|---|---|---|
+| `wind_speed`, `gust_speed`, `wind_dir` | GFS 13km | 3 |
+| `swell_height`, `swell_period`, `swell_dir` | GFS Wave Height (gfswh) | 84 |
+
+Default station: **Tel-Aviv** (`WINDGURU_SPOT_ID=308`). Multiple stations can be added via a comma-separated `WINDGURU_SPOT_IDS` env var.
 
 ---
 
@@ -100,6 +115,8 @@ uvicorn main:app --reload
 # open http://localhost:8000
 ```
 
+On startup the app also starts the weather scraper scheduler (every 1 hour). Logs confirm: `[weather] Scheduler started — collecting every hour`.
+
 ---
 
 ## Deployment (Fly.io)
@@ -110,6 +127,7 @@ uvicorn main:app --reload
 fly launch                  # creates fly.toml
 fly secrets set GOOGLE_CREDS="$(cat .secrets/credentials.json)"
 fly secrets set GOOGLE_SHEET_ID="your_sheet_id_here"
+fly secrets set WINDGURU_SPOT_ID=308
 fly deploy
 ```
 
@@ -159,9 +177,10 @@ This is also available directly from the `/admin/beaches` UI.
 ## Project Structure
 
 ```
-main.py              # FastAPI app, all routes
+main.py              # FastAPI app, all routes + hourly weather scheduler
 geo.py               # Sea check, depth estimate, nearest beach
-sheets.py            # Google Sheets read/write
+sheets.py            # Google Sheets read/write (reports + weather)
+wgscraper.py         # Windguru forecast scraper (requests-based, no Selenium)
 migrate_beaches.py   # CLI tool to re-snap old reports to current beaches
 prepare_data.py      # One-time: downloads + crops coastline GeoJSON
 requirements.txt
