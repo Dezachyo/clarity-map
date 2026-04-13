@@ -450,6 +450,12 @@
         btn.disabled = false;
         btn.textContent = 'Submit report';
       } else {
+        const data = await res.json();
+        if (data.delete_token && data.submitted_at) {
+          const tokens = JSON.parse(localStorage.getItem('clarity_tokens') || '{}');
+          tokens[data.submitted_at] = data.delete_token;
+          localStorage.setItem('clarity_tokens', JSON.stringify(tokens));
+        }
         if (reportPopup) { reportPopup.remove(); reportPopup = null; }
         const rRes = await fetch('/api/reports');
         allFeatures = (await rRes.json()).features;
@@ -465,6 +471,25 @@
   function showFormError(msg) {
     const el = document.getElementById('form-error');
     if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+  }
+
+  async function deleteReport(submittedAt) {
+    const tokens = JSON.parse(localStorage.getItem('clarity_tokens') || '{}');
+    const token = tokens[submittedAt];
+    if (!token) return;
+    const res = await fetch(`/api/report?submitted_at=${encodeURIComponent(submittedAt)}&token=${encodeURIComponent(token)}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      delete tokens[submittedAt];
+      localStorage.setItem('clarity_tokens', JSON.stringify(tokens));
+      map.closePopup();
+      const rRes = await fetch('/api/reports');
+      allFeatures = (await rRes.json()).features;
+      applyWindow(currentWindow);
+    } else {
+      alert('Could not delete report.');
+    }
   }
 
   function showToast(msg) {
@@ -505,11 +530,13 @@
     });
     currentFiltered = filtered;
 
+    const myTokens = JSON.parse(localStorage.getItem('clarity_tokens') || '{}');
     markersLayer.clearLayers();
     filtered.forEach(f => {
       const [lon, lat] = f.geometry.coordinates;
       const p = f.properties;
       const clarity = parseFloat(p.clarity_m) || 0;
+      const canDelete = p.submitted_at && myTokens[p.submitted_at];
       L.circleMarker([lat, lon], {
         radius: 8,
         color: clarityColor(clarity),
@@ -523,6 +550,7 @@
         Depth: ${p.depth_m} m<br>
         Diver: ${p.username}<br>
         ${p.dive_datetime ? p.dive_datetime.split('T')[1]?.slice(0, 5) ?? p.dive_datetime : ''}
+        ${canDelete ? `<br><button onclick="deleteReport('${p.submitted_at}')" style="margin-top:6px;font-size:0.75rem;color:#c0392b;background:none;border:1px solid #c0392b;border-radius:4px;padding:2px 8px;cursor:pointer;">Delete my report</button>` : ''}
       `)
       .addTo(markersLayer);
     });

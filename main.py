@@ -11,7 +11,8 @@ Routes:
 
 import json
 import os
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -224,16 +225,30 @@ async def submit_report(request: Request, report: ReportIn):
     if report.beach not in valid_beach_names:
         raise HTTPException(status_code=422, detail=f"Unknown beach: {report.beach!r}")
 
+    submitted_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    delete_token = str(uuid.uuid4())
+
     sheets.save_report(
         username=report.username,
+        submitted_at=submitted_at,
         dive_datetime=report.dive_datetime,
         clarity_m=report.clarity_m,
         beach=report.beach,
         depth_m=report.depth_m,
         lat=report.lat,
         lon=report.lon,
+        delete_token=delete_token,
     )
-    return {"status": "ok"}
+    return {"status": "ok", "submitted_at": submitted_at, "delete_token": delete_token}
+
+
+@app.delete("/api/report", status_code=200)
+async def delete_report(submitted_at: str, token: str):
+    """Delete a report if the token matches. Token is only known to the original submitter."""
+    deleted = sheets.delete_report(submitted_at=submitted_at, delete_token=token)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Report not found or token invalid")
+    return {"status": "deleted"}
 
 
 # ── Clarity grid ──────────────────────────────────────────────────────────────
