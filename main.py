@@ -30,15 +30,44 @@ from slowapi.errors import RateLimitExceeded
 
 from collections import defaultdict
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 import geo
 import sheets
+from wgscraper import scrape_windguru
 
 GRID_SIZE = 0.05  # degrees ≈ 5 km per cell
+WINDGURU_SPOT_ID = int(os.getenv("WINDGURU_SPOT_ID", "308"))
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Clarity Map")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# ── Weather collection ──────────────────────────────────────────────────────────
+
+async def collect_weather():
+    """Scrape Windguru forecast and append rows to the weather sheet."""
+    try:
+        from datetime import timezone as _tz
+        scrape_ts = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        df = scrape_windguru(id_spot=WINDGURU_SPOT_ID, days=3)
+        df["scrape_timestamp"] = scrape_ts
+        sheets.append_weather_rows(df.to_dict("records"))
+        print(f"[weather] ✅ Saved {len(df)} rows (scraped at {scrape_ts})")
+    except Exception as e:
+        print(f"[weather] ❌ Failed: {e}")
+
+
+_scheduler = AsyncIOScheduler()
+
+
+@app.on_event("startup")
+async def start_scheduler():
+    _scheduler.add_job(collect_weather, "interval", hours=1, id="collect_weather")
+    _scheduler.start()
+    print("[weather] Scheduler started — collecting every hour")
 
 BASE_DIR = Path(__file__).parent
 BEACHES_FILE = BASE_DIR / "data" / "beaches.json"

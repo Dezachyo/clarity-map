@@ -28,6 +28,13 @@ COLUMNS = ["username", "submitted_at", "dive_datetime", "clarity_m", "beach", "d
 HEADER_ROW = COLUMNS  # row 1 of the sheet
 BEACH_COL = COLUMNS.index("beach") + 1  # 1-based column index for gspread
 
+WEATHER_COLUMNS = [
+    "scrape_timestamp", "forecast_datetime",
+    "wind_speed", "gust_speed", "wind_dir",
+    "swell_height", "swell_period", "swell_dir",
+    "station_id", "station_name",
+]
+
 
 @lru_cache(maxsize=1)
 def _get_sheet():
@@ -84,6 +91,41 @@ def save_report(
         lon,
     ]
     sheet.append_row(row, value_input_option="USER_ENTERED")
+
+
+def _get_weather_sheet():
+    """Return (and lazily create) the windguru_forecasts worksheet."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    creds_json = os.environ.get("GOOGLE_CREDS")
+    sheet_id = os.environ.get("GOOGLE_SHEET_ID")
+
+    if not creds_json:
+        raise EnvironmentError("GOOGLE_CREDS env var not set")
+    if not sheet_id:
+        raise EnvironmentError("GOOGLE_SHEET_ID env var not set")
+
+    creds = Credentials.from_service_account_info(
+        json.loads(creds_json), scopes=SCOPES
+    )
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(sheet_id)
+
+    titles = [ws.title for ws in spreadsheet.worksheets()]
+    if "windguru_forecasts" not in titles:
+        ws = spreadsheet.add_worksheet(title="windguru_forecasts", rows=10000, cols=len(WEATHER_COLUMNS))
+        ws.append_row(WEATHER_COLUMNS)
+    else:
+        ws = spreadsheet.worksheet("windguru_forecasts")
+
+    return ws
+
+
+def append_weather_rows(rows: list[dict]) -> None:
+    """Append weather forecast rows to the windguru_forecasts worksheet (batched)."""
+    ws = _get_weather_sheet()
+    values = [[row.get(col, "") for col in WEATHER_COLUMNS] for row in rows]
+    ws.append_rows(values, value_input_option="USER_ENTERED")
 
 
 def update_rows_beach(updates: list[tuple[int, str]]) -> None:
