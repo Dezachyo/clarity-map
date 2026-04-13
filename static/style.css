@@ -414,3 +414,31 @@ input[type="range"].vertical {
 }
 
 .hidden { display: none !important; }
+
+/* ── Attribution ──────────────────────────────────────────────────────────── */
+
+#attribution {
+  position: fixed;
+  bottom: 24px;
+  left: 8px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-family: 'Inter', sans-serif;
+  color: #4a7a9b;
+  opacity: 0.75;
+  pointer-events: auto;
+}
+
+#attribution a {
+  color: inherit;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+#attribution a:hover {
+  opacity: 0.6;
+}
