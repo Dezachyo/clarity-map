@@ -340,12 +340,17 @@ async def geo_info(lat: float, lon: float):
     Returns sea/land status, depth estimate, and nearest beach.
     """
     in_sea = geo.is_in_sea(lat, lon)
-    if not in_sea:
-        return {"is_sea": False}
-
-    depth = geo.estimate_depth(lat, lon)
     beach = geo.nearest_beach(lat, lon)
 
+    if not in_sea:
+        return {
+            "is_sea": False,
+            "nearest_beach": beach["name"],
+            "nearest_beach_lat": beach["lat"],
+            "nearest_beach_lon": beach["lon"],
+        }
+
+    depth = geo.estimate_depth(lat, lon)
     return {
         "is_sea": True,
         "depth_estimate": depth,
