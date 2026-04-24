@@ -29,7 +29,7 @@ html, body {
 
 .report-popup .leaflet-popup-content {
   margin: 0;
-  width: 260px !important;
+  width: 270px !important;
 }
 
 .report-popup .leaflet-popup-tip {
@@ -45,20 +45,20 @@ html, body {
 /* ── Form ─────────────────────────────────────────────────────────────────── */
 
 #report-form {
-  padding: 12px 14px 14px;
+  padding: 9px 11px 11px;
 }
 
 #form-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
+  margin-bottom: 7px;
+  padding-bottom: 6px;
   border-bottom: 1px solid #b0cfe0;
 }
 
 #form-title {
-  font-size: 0.88rem;
+  font-size: 0.80rem;
   font-weight: 600;
   color: #1a4a6a;
 }
@@ -70,8 +70,8 @@ html, body {
 
 #report-form label {
   display: block;
-  margin-bottom: 8px;
-  font-size: 0.78rem;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
   font-weight: 500;
   color: #2a5a7a;
 }
@@ -82,12 +82,12 @@ html, body {
   display: block;
   width: 100%;
   margin-top: 3px;
-  padding: 6px 9px;
+  padding: 4px 7px;
   background: #f5fafd;
   border: 1px solid #a0c4d8;
   border-radius: 7px;
   color: #1a3a52;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-family: 'Inter', sans-serif;
 }
 
@@ -97,6 +97,17 @@ html, body {
   border-color: #0074D9;
   background: #fff;
 }
+
+/* ── Name + datetime row ──────────────────────────────────────────────────── */
+
+.name-dt-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.name-dt-row .name-col { flex: 1; min-width: 0; }
+.name-dt-row .dt-col   { flex: 0 0 130px; }
 
 /* ── Sliders row ──────────────────────────────────────────────────────────── */
 

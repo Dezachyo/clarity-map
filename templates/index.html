@@ -284,12 +284,6 @@
 
   // ── Build form HTML (injected into Leaflet popup) ─────────────────────────────
 
-  function buildBeachOptions(selectedName) {
-    return BEACH_LIST.map(b =>
-      `<option value="${b.name}" ${b.name === selectedName ? 'selected' : ''}>${b.name}</option>`
-    ).join('');
-  }
-
   function buildFormHTML(lat, lon, info) {
     const depthVal = Math.min(Math.round(info.depth_estimate || 0), 50);
     const now = new Date();
@@ -303,17 +297,20 @@
         <span id="form-coords">${lat.toFixed(4)}°N ${lon.toFixed(4)}°E</span>
       </div>
 
-      <label>Nickname
-        <input type="text" id="f-username" maxlength="50" placeholder="Your diving name" required>
-      </label>
+      <input type="hidden" id="f-beach" value="${info.nearest_beach}">
 
-      <label>Dive date & time
-        <input type="datetime-local" id="f-datetime" value="${nowStr}" required>
-      </label>
-
-      <label>Beach
-        <select id="f-beach" onchange="onBeachChange()">${buildBeachOptions(info.nearest_beach)}</select>
-      </label>
+      <div class="name-dt-row">
+        <div class="name-col">
+          <label>Nickname
+            <input type="text" id="f-username" maxlength="50" placeholder="Diving name">
+          </label>
+        </div>
+        <div class="dt-col">
+          <label>Date &amp; time
+            <input type="datetime-local" id="f-datetime" value="${nowStr}" required>
+          </label>
+        </div>
+      </div>
 
       <div class="sliders-row">
         <div class="slider-col">
@@ -390,14 +387,6 @@
     onDepthChange(Math.min(Math.round(info.depth_estimate || 0), 50));
   });
 
-  // ── Beach dropdown change → pan map ──────────────────────────────────────────
-
-  function onBeachChange() {
-    const sel = document.getElementById('f-beach');
-    const b = BEACH_LIST.find(x => x.name === sel.value);
-    if (b) map.panTo([b.lat, b.lon]);
-  }
-
   // ── Submit ────────────────────────────────────────────────────────────────────
 
   async function submitReport() {
@@ -421,13 +410,6 @@
       depth_m:       parseFloat(document.getElementById('f-depth').value),
       lat, lon,
     };
-
-    if (!payload.username) {
-      showFormError('Please enter a nickname');
-      btn.disabled = false;
-      btn.textContent = 'Submit report';
-      return;
-    }
 
     if (new Date(payload.dive_datetime) > new Date()) {
       showFormError('Dive time cannot be in the future');
