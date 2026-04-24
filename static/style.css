@@ -29,7 +29,7 @@ html, body {
 
 .report-popup .leaflet-popup-content {
   margin: 0;
-  width: 270px !important;
+  width: 220px !important;
 }
 
 .report-popup .leaflet-popup-tip {
@@ -98,17 +98,6 @@ html, body {
   background: #fff;
 }
 
-/* ── Name + datetime row ──────────────────────────────────────────────────── */
-
-.name-dt-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.name-dt-row .name-col { flex: 1; min-width: 0; }
-.name-dt-row .dt-col   { flex: 0 0 130px; }
-
 /* ── Sliders row ──────────────────────────────────────────────────────────── */
 
 .sliders-row {
@@ -165,13 +154,13 @@ input[type="range"].vertical {
   height: 90px;
   border-radius: 4px;
   background: linear-gradient(to bottom,
-    rgb(220,240,255)   0%,      /* 40m — white */
-    rgb(220,240,255)  50%,      /* 20m — white (hard stop) */
-    rgb(150,210,245)  62.5%,    /* 15m */
-    rgb(50,140,210)   75%,      /* 10m */
-    rgb(20,80,160)    81.25%,   /* 7.5m */
-    rgb(10,25,80)     93.75%,   /* 2.5m */
-    rgb(65,30,10)     100%      /* 0m */
+    rgb(65,30,10)      0%,      /* 0m  — dark */
+    rgb(10,25,80)      6.25%,   /* 2.5m */
+    rgb(20,80,160)     18.75%,  /* 7.5m */
+    rgb(50,140,210)    25%,     /* 10m */
+    rgb(150,210,245)   37.5%,   /* 15m */
+    rgb(220,240,255)   50%,     /* 20m — white (hard stop) */
+    rgb(220,240,255)   100%     /* 40m — white */
   );
   flex-shrink: 0;
 }
