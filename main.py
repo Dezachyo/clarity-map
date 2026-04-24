@@ -10,6 +10,7 @@ Routes:
 """
 
 import json
+import random
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -194,7 +195,7 @@ async def get_reports():
 # ── Submit report ──────────────────────────────────────────────────────────────
 
 class ReportIn(BaseModel):
-    username: str = Field(..., min_length=1, max_length=50)
+    username: str = Field("", max_length=50)
     dive_datetime: str  # ISO8601, e.g. "2024-06-01T09:30"
     clarity_m: float = Field(..., ge=0, le=40)
     beach: str = Field(..., min_length=1, max_length=100)
@@ -207,6 +208,10 @@ class ReportIn(BaseModel):
 @limiter.limit("10/10minutes")
 async def submit_report(request: Request, report: ReportIn):
     """Validate and save a new dive report."""
+    _FISH = ["🐟","🐠","🐡","🦈","🐙","🦑","🦐","🦞","🦀","🐚","🐬","🐳","🐋","🦭","🪸"]
+    if not report.username.strip():
+        report.username = "Anonymous " + random.choice(_FISH)
+
     if not geo.is_in_sea(report.lat, report.lon):
         raise HTTPException(status_code=400, detail="Location is not in the sea")
 
