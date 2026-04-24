@@ -14,43 +14,46 @@
   <button id="satellite-toggle" onclick="toggleSatellite()">Satellite</button>
   <button id="beaches-toggle" onclick="toggleBeaches()">Beaches: ON</button>
 
-  <div id="clarity-legend">
-    <div class="legend-title">Clarity</div>
-    <div class="legend-inner">
-      <div class="legend-bar"></div>
-      <div class="legend-ticks">
-        <span>20m</span>
-        <span>15m</span>
-        <span>10m</span>
-        <span>5m</span>
-        <span>0m</span>
-      </div>
-    </div>
-  </div>
-
-  <div id="stats-bar">
-    <div id="stats-header">
-      <div>
-        <div id="stats-label">Mean clarity</div>
+  <div id="left-panel">
+    <div id="stats-bar">
+      <div id="stats-label">Clarity today</div>
+      <div id="stats-header-row">
         <div id="stats-value">—</div>
         <div id="stats-count"></div>
       </div>
-      <button id="chart-toggle" onclick="toggleChart()" title="7-day chart">▾</button>
+      <div id="chart-panel">
+        <canvas id="clarity-chart" height="100"></canvas>
+      </div>
     </div>
-    <div id="stats-buttons">
-      <button class="stats-btn" onclick="setWindow('today', this)">Today</button>
-      <button class="stats-btn active" onclick="setWindow(24, this)">24h</button>
-      <button class="stats-btn" onclick="setWindow(48, this)">48h</button>
-      <button class="stats-btn" onclick="setWindow(168, this)">7d</button>
+
+    <div id="reports-filter">
+      <div id="filter-label">Show reports <span id="filter-count"></span></div>
+      <div id="stats-buttons">
+        <button class="stats-btn" onclick="setWindow('today', this)">Today</button>
+        <button class="stats-btn active" onclick="setWindow(24, this)">24h</button>
+        <button class="stats-btn" onclick="setWindow(48, this)">48h</button>
+        <button class="stats-btn" onclick="setWindow(168, this)">7d</button>
+      </div>
     </div>
-    <div id="chart-panel">
-      <div id="chart-title">Last 7 days — mean clarity per day</div>
-      <canvas id="clarity-chart"></canvas>
+
+    <div id="clarity-legend">
+      <div class="legend-title">Clarity</div>
+      <div class="legend-inner">
+        <div class="legend-bar"></div>
+        <div class="legend-ticks">
+          <span>20m</span>
+          <span>15m</span>
+          <span>10m</span>
+          <span>5m</span>
+          <span>0m</span>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 
   <script>
   // ── Beach list (loaded from server) ──────────────────────────────────────────
@@ -455,6 +458,8 @@
         const rRes = await fetch('/api/reports');
         allFeatures = (await rRes.json()).features;
         applyWindow(currentWindow);
+        updateTodayStats();
+        renderDailyChart();
       }
     } catch {
       showFormError('Network error — please try again');
@@ -482,6 +487,8 @@
       const rRes = await fetch('/api/reports');
       allFeatures = (await rRes.json()).features;
       applyWindow(currentWindow);
+      updateTodayStats();
+      renderDailyChart();
     } else {
       alert('Could not delete report.');
     }
@@ -506,6 +513,8 @@
     const geojson = await res.json();
     allFeatures = geojson.features;
     applyWindow(currentWindow);
+    updateTodayStats();
+    renderDailyChart();
   }
 
   function getCutoff(window) {
@@ -550,19 +559,33 @@
       .addTo(markersLayer);
     });
 
-    // Update stats bar
-    const valEl   = document.getElementById('stats-value');
-    const countEl = document.getElementById('stats-count');
-    if (filtered.length === 0) {
-      valEl.textContent   = '—';
-      countEl.textContent = 'No reports';
-    } else {
-      const mean = filtered.reduce((s, f) => s + (parseFloat(f.properties.clarity_m) || 0), 0) / filtered.length;
-      valEl.textContent   = `${mean.toFixed(1)} m`;
-      countEl.textContent = `${filtered.length} dive${filtered.length !== 1 ? 's' : ''}`;
-    }
+    const countEl = document.getElementById('filter-count');
+    if (countEl) countEl.textContent = filtered.length ? `(${filtered.length})` : '';
 
     if (clarityLayerVisible) clarityHeatLayer.setFeatures(filtered);
+  }
+
+  function updateTodayStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayFeatures = allFeatures.filter(f => {
+      const dt = new Date(f.properties.dive_datetime);
+      return dt >= today && dt < tomorrow;
+    });
+
+    const valEl   = document.getElementById('stats-value');
+    const countEl = document.getElementById('stats-count');
+    if (todayFeatures.length === 0) {
+      valEl.textContent   = '—';
+      countEl.textContent = 'No dives today';
+    } else {
+      const mean = todayFeatures.reduce((s, f) => s + (parseFloat(f.properties.clarity_m) || 0), 0) / todayFeatures.length;
+      valEl.textContent   = `${mean.toFixed(1)} m`;
+      countEl.textContent = `${todayFeatures.length} dive${todayFeatures.length !== 1 ? 's' : ''}`;
+    }
   }
 
   function setWindow(window, btn) {
@@ -572,25 +595,16 @@
     applyWindow(window);
   }
 
-  // ── 7-day clarity chart ───────────────────────────────────────────────────────
+  // ── 5-day clarity chart (always visible) ─────────────────────────────────────
 
   let clarityChart = null;
-  let chartOpen = false;
 
-  function toggleChart() {
-    chartOpen = !chartOpen;
-    document.getElementById('chart-panel').classList.toggle('open', chartOpen);
-    document.getElementById('chart-toggle').classList.toggle('open', chartOpen);
-    if (chartOpen) renderChart();
-  }
-
-  function renderChart() {
-    const days = 7;
+  function renderDailyChart() {
     const labels = [];
     const means  = [];
     const colors = [];
 
-    for (let i = days - 1; i >= 0; i--) {
+    for (let i = 4; i >= 0; i--) {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
       d.setDate(d.getDate() - i);
@@ -602,12 +616,15 @@
         return dt >= d && dt < next;
       });
 
-      const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
+      let label;
+      if (i === 0) label = 'Today';
+      else if (i === 1) label = 'Yesterday';
+      else label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       labels.push(label);
 
       if (dayFeatures.length === 0) {
         means.push(null);
-        colors.push('rgba(176, 207, 224, 0.4)');
+        colors.push('rgba(176, 207, 224, 0.35)');
       } else {
         const mean = dayFeatures.reduce((s, f) => s + (parseFloat(f.properties.clarity_m) || 0), 0) / dayFeatures.length;
         means.push(parseFloat(mean.toFixed(1)));
@@ -617,7 +634,13 @@
 
     const ctx = document.getElementById('clarity-chart').getContext('2d');
     if (clarityChart) clarityChart.destroy();
+    const validMeans = means.filter(v => v !== null);
+    const yMax = validMeans.length
+      ? Math.ceil((Math.max(...validMeans) * 1.35) / 5) * 5
+      : 20;
+
     clarityChart = new Chart(ctx, {
+      plugins: [ChartDataLabels],
       type: 'bar',
       data: {
         labels,
@@ -629,16 +652,22 @@
         }],
       },
       options: {
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { font: { size: 9, family: 'Inter' }, color: '#4a7a9b' }, grid: { display: false } },
-          y: {
-            min: 0,
-            suggestedMax: Math.ceil((Math.max(...means.filter(v => v !== null)) * 1.2) / 5) * 5,
-            ticks: { font: { size: 9, family: 'Inter' }, color: '#4a7a9b',
-                     callback: v => v + 'm' },
-            grid: { color: 'rgba(176,207,224,0.3)' },
+        maintainAspectRatio: false,
+        layout: { padding: { top: 14 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            anchor: 'end',
+            align: 'top',
+            formatter: v => v === null ? '' : v + 'm',
+            font: { size: 11, family: 'Inter', weight: '600' },
+            color: '#1a4a6a',
+            display: ctx => ctx.dataset.data[ctx.dataIndex] !== null,
           },
+        },
+        scales: {
+          x: { ticks: { font: { size: 8, family: 'Inter' }, color: '#4a7a9b' }, grid: { display: false } },
+          y: { display: false, min: 0, suggestedMax: yMax },
         },
         animation: { duration: 300 },
       },
