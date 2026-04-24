@@ -202,11 +202,11 @@ input[type="range"].vertical {
   background: rgba(232, 244, 248, 0.92);
   border: 1px solid #b0cfe0;
   border-radius: 10px;
-  padding: 8px 12px 10px;
+  padding: 6px 10px 8px;
   font-family: 'Inter', sans-serif;
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 8px rgba(0,80,140,0.1);
-  width: 200px;
+  width: 165px;
 }
 
 #stats-label {
@@ -226,7 +226,7 @@ input[type="range"].vertical {
 }
 
 #stats-value {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: #0074D9;
   line-height: 1.2;
@@ -250,11 +250,11 @@ input[type="range"].vertical {
   background: rgba(232, 244, 248, 0.92);
   border: 1px solid #b0cfe0;
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-family: 'Inter', sans-serif;
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 8px rgba(0,80,140,0.1);
-  width: 200px;
+  width: 165px;
 }
 
 #filter-label {
@@ -279,7 +279,7 @@ input[type="range"].vertical {
 
 #stats-buttons {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   justify-content: center;
 }
 
@@ -302,8 +302,8 @@ input[type="range"].vertical {
 }
 
 .stats-btn {
-  padding: 3px 7px;
-  font-size: 0.72rem;
+  padding: 2px 5px;
+  font-size: 0.65rem;
   font-family: 'Inter', sans-serif;
   font-weight: 500;
   color: #4a7a9b;
