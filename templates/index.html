@@ -281,7 +281,7 @@
 
   function onDepthChange(newDepth) {
     document.getElementById('depth-val').textContent = newDepth;
-    if (anchorLat === null || anchorBearing === null) return;
+    if (anchorLat == null || anchorBearing == null) return;
     const distKm = newDepth / 10;
     [reportLat, reportLon] = destinationPoint(anchorLat, anchorLon, anchorBearing, distKm);
     const coordEl = document.getElementById('form-coords');
@@ -363,31 +363,30 @@
     }
   });
 
-  map.on('click', async (e) => {
-    const {lat, lng} = e.latlng;
-
+  async function openReportForm(lat, lng, skipSeaCheck = false) {
     const res = await fetch(`/api/geo-info?lat=${lat}&lon=${lng}`);
     const info = await res.json();
 
-    if (!info.is_sea) {
+    if (!skipSeaCheck && !info.is_sea) {
       showToast('Please click on the sea to add a report.');
       return;
     }
 
+    map.closePopup();
     hideOverlays();
 
-    // Store position state
     reportLat = lat;
     reportLon = lng;
     anchorLat = info.nearest_beach_lat;
     anchorLon = info.nearest_beach_lon;
-    anchorBearing = bearingBetween(anchorLat, anchorLon, lat, lng);
+    const samePoint = Math.abs(lat - anchorLat) < 1e-6 && Math.abs(lng - anchorLon) < 1e-6;
+    anchorBearing = samePoint ? 270 : bearingBetween(anchorLat, anchorLon, lat, lng);
 
     if (reportPopup) reportPopup.remove();
 
     // Anchor the popup 220px below the click in screen space so the box
     // opens southward and stays fully visible near the northern coast
-    const clickPx = map.project(e.latlng);
+    const clickPx = map.project(L.latLng(lat, lng));
     clickPx.y += 220;
     const popupLatLng = map.unproject(clickPx);
 
@@ -405,6 +404,13 @@
     .setContent(buildFormHTML(lat, lng, info))
     .openOn(map);
     onDepthChange(Math.min(Math.round(info.depth_estimate || 0), 50));
+  }
+
+  window.openReportForm = openReportForm;
+
+  map.on('click', async (e) => {
+    const {lat, lng} = e.latlng;
+    await openReportForm(lat, lng);
   });
 
   // ── Submit ────────────────────────────────────────────────────────────────────
@@ -748,6 +754,11 @@
           <div style="font-size:0.8rem;font-weight:600;color:#1a4a6a;margin-bottom:6px">${b.name}</div>
           <div style="font-size:0.65rem;color:#4a7a9b;margin-bottom:6px">Last 7 days — mean clarity</div>
           <canvas id="${canvasId}" width="190" height="110"></canvas>
+          <button onclick="openReportForm(${b.lat}, ${b.lon}, true)" style="
+            margin-top:10px;width:100%;padding:6px 0;
+            background:#1a4a6a;color:white;border:none;border-radius:6px;
+            font-size:0.75rem;font-family:inherit;cursor:pointer;
+          ">Report Clarity</button>
         `);
 
       const marker = L.marker([b.lat, b.lon], { icon }).addTo(beachLayer);
@@ -784,9 +795,20 @@
     });
   }
 
+  function updateBeachVisibility() {
+    const checkboxOn = document.getElementById('chk-beaches').checked;
+    if (checkboxOn && map.getZoom() >= 10) {
+      if (!map.hasLayer(beachLayer)) beachLayer.addTo(map);
+    } else {
+      if (map.hasLayer(beachLayer)) map.removeLayer(beachLayer);
+    }
+  }
+
+  map.on('zoomend', updateBeachVisibility);
+
   function toggleBeaches() {
     beachesVisible = document.getElementById('chk-beaches').checked;
-    beachesVisible ? beachLayer.addTo(map) : map.removeLayer(beachLayer);
+    updateBeachVisibility();
   }
 
   let layersOpen = false;
