@@ -153,7 +153,15 @@ input[type="range"].vertical {
   width: 8px;
   height: 90px;
   border-radius: 4px;
-  background: linear-gradient(to bottom, #001f3f, #0074D9, #7FDBFF);
+  background: linear-gradient(to bottom,
+    rgb(220,240,255)   0%,      /* 40m — white */
+    rgb(220,240,255)  50%,      /* 20m — white (hard stop) */
+    rgb(150,210,245)  62.5%,    /* 15m */
+    rgb(50,140,210)   75%,      /* 10m */
+    rgb(20,80,160)    81.25%,   /* 7.5m */
+    rgb(10,25,80)     93.75%,   /* 2.5m */
+    rgb(65,30,10)     100%      /* 0m */
+  );
   flex-shrink: 0;
 }
 
@@ -337,11 +345,11 @@ input[type="range"].vertical {
   border-radius: 4px;
   flex-shrink: 0;
   background: linear-gradient(to bottom,
-    rgb(220,240,255)   0%,    /* 40m */
-    rgb(150,210,245)  25%,    /* 30m */
-    rgb(50,140,210)   50%,    /* 20m */
-    rgb(20,80,160)    62.5%,  /* 15m */
-    rgb(10,25,80)     87.5%,  /* 5m  */
+    rgb(220,240,255)   0%,    /* 20m */
+    rgb(150,210,245)  25%,    /* 15m */
+    rgb(50,140,210)   50%,    /* 10m */
+    rgb(20,80,160)    62.5%,  /* 7.5m */
+    rgb(10,25,80)     87.5%,  /* 2.5m */
     rgb(65,30,10)     100%    /* 0m  */
   );
 }
