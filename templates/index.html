@@ -19,10 +19,10 @@
     <div class="legend-inner">
       <div class="legend-bar"></div>
       <div class="legend-ticks">
-        <span>40m</span>
-        <span>30m</span>
         <span>20m</span>
+        <span>15m</span>
         <span>10m</span>
+        <span>5m</span>
         <span>0m</span>
       </div>
     </div>
@@ -59,24 +59,18 @@
 
   // ── Clarity colour helpers ────────────────────────────────────────────────────
 
-  // Multi-stop clarity gradient:
-  // 0m  → dark brown (muddy water)
-  // 5m  → dark navy
-  // 15m → medium blue
-  // 20m → bright blue
-  // 30m → very light blue
-  // 40m → near white
+  // Clarity gradient: original blue palette compressed to 0–20m; anything above 20m clamps to near-white
   const CLARITY_STOPS = [
     { v:  0, r:  65, g:  30, b:  10 },
-    { v:  5, r:  10, g:  25, b:  80 },
-    { v: 15, r:  20, g:  80, b: 160 },
-    { v: 20, r:  50, g: 140, b: 210 },
-    { v: 30, r: 150, g: 210, b: 245 },
-    { v: 40, r: 220, g: 240, b: 255 },
+    { v:  2.5, r:  10, g:  25, b:  80 },
+    { v:  7.5, r:  20, g:  80, b: 160 },
+    { v: 10, r:  50, g: 140, b: 210 },
+    { v: 15, r: 150, g: 210, b: 245 },
+    { v: 20, r: 220, g: 240, b: 255 },
   ];
 
   function clarityRGB(m) {
-    const clamped = Math.max(0, Math.min(m, 40));
+    const clamped = Math.max(0, Math.min(m, 20));
     let lo = CLARITY_STOPS[0], hi = CLARITY_STOPS[CLARITY_STOPS.length - 1];
     for (let i = 0; i < CLARITY_STOPS.length - 1; i++) {
       if (clamped <= CLARITY_STOPS[i + 1].v) { lo = CLARITY_STOPS[i]; hi = CLARITY_STOPS[i + 1]; break; }
@@ -95,7 +89,7 @@
   }
 
   function clarityOpacity(m) {
-    return 0.85 - (Math.min(m, 40) / 40) * 0.45;
+    return 0.85 - (Math.min(m, 20) / 20) * 0.45;
   }
 
   // ── Map setup ─────────────────────────────────────────────────────────────────
@@ -294,7 +288,7 @@
   }
 
   function buildFormHTML(lat, lon, info) {
-    const depthVal = Math.round(info.depth_estimate || 0);
+    const depthVal = Math.min(Math.round(info.depth_estimate || 0), 50);
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     const nowStr = now.toISOString().slice(0, 16);
@@ -325,7 +319,7 @@
           <span class="slider-unit">m</span>
           <div class="slider-track">
             <input type="range" class="vertical" id="f-depth"
-                   min="0" max="200" step="1" value="${depthVal}"
+                   min="0" max="50" step="1" value="${depthVal}"
                    oninput="onDepthChange(parseInt(this.value))">
           </div>
         </div>
@@ -390,6 +384,7 @@
     .setLatLng(popupLatLng)
     .setContent(buildFormHTML(lat, lng, info))
     .openOn(map);
+    onDepthChange(Math.min(Math.round(info.depth_estimate || 0), 50));
   });
 
   // ── Beach dropdown change → pan map ──────────────────────────────────────────
