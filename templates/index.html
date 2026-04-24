@@ -344,7 +344,24 @@
 
   // ── Map click → open popup form ───────────────────────────────────────────────
 
+  function hideOverlays() {
+    document.getElementById('left-panel').style.visibility = 'hidden';
+    document.getElementById('layers-box').style.visibility = 'hidden';
+  }
+
+  function showOverlays() {
+    document.getElementById('left-panel').style.visibility = '';
+    document.getElementById('layers-box').style.visibility = '';
+  }
+
   let reportPopup = null;
+
+  map.on('popupclose', (e) => {
+    if (reportPopup && e.popup === reportPopup) {
+      showOverlays();
+      reportPopup = null;
+    }
+  });
 
   map.on('click', async (e) => {
     const {lat, lng} = e.latlng;
@@ -356,6 +373,8 @@
       showToast('Please click on the sea to add a report.');
       return;
     }
+
+    hideOverlays();
 
     // Store position state
     reportLat = lat;
@@ -379,8 +398,8 @@
       autoClose: false,
       closeOnClick: false,
       autoPan: true,
-      autoPanPaddingTopLeft: [190, 20],
-      autoPanPaddingBottomRight: [20, 20],
+      autoPanPaddingTopLeft: [10, 10],
+      autoPanPaddingBottomRight: [10, 10],
     })
     .setLatLng(popupLatLng)
     .setContent(buildFormHTML(lat, lng, info))
