@@ -184,41 +184,30 @@ input[type="range"].vertical {
 #submit-btn:hover { background: #005fa8; }
 #submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Stats bar ────────────────────────────────────────────────────────────── */
+/* ── Left panel (wrapper for stats, filter, legend) ──────────────────────── */
 
-#stats-bar {
+#left-panel {
   position: fixed;
   top: 12px; left: 12px;
   z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* ── Clarity today box ────────────────────────────────────────────────────── */
+
+#stats-bar {
   background: rgba(232, 244, 248, 0.92);
   border: 1px solid #b0cfe0;
   border-radius: 10px;
-  padding: 8px 12px 9px;
+  padding: 8px 12px 10px;
   font-family: 'Inter', sans-serif;
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 8px rgba(0,80,140,0.1);
-  min-width: 140px;
-  text-align: center;
+  width: 200px;
 }
-
-#stats-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2px;
-}
-
-#chart-toggle {
-  background: none;
-  border: none;
-  color: #4a7a9b;
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 0 0 0 6px;
-  line-height: 1;
-  transition: transform 0.2s;
-}
-#chart-toggle.open { transform: rotate(180deg); }
 
 #stats-label {
   font-size: 0.68rem;
@@ -227,7 +216,13 @@ input[type="range"].vertical {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 2px;
-  text-align: left;
+}
+
+#stats-header-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 2px;
 }
 
 #stats-value {
@@ -235,38 +230,57 @@ input[type="range"].vertical {
   font-weight: 600;
   color: #0074D9;
   line-height: 1.2;
-  text-align: left;
 }
 
 #stats-count {
   font-size: 0.68rem;
   color: #6a9ab8;
-  margin-bottom: 7px;
   min-height: 1em;
-  text-align: left;
+}
+
+#chart-panel {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #b0cfe0;
+}
+
+/* ── Show reports filter box ──────────────────────────────────────────────── */
+
+#reports-filter {
+  background: rgba(232, 244, 248, 0.92);
+  border: 1px solid #b0cfe0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,80,140,0.1);
+  width: 200px;
+}
+
+#filter-label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #4a7a9b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#filter-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #0074D9;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 #stats-buttons {
   display: flex;
   gap: 4px;
   justify-content: center;
-}
-
-#chart-panel {
-  display: none;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #b0cfe0;
-  width: 200px;
-}
-
-#chart-panel.open { display: block; }
-
-#chart-title {
-  font-size: 0.65rem;
-  color: #4a7a9b;
-  margin-bottom: 6px;
-  text-align: center;
 }
 
 /* ── Beach chart popup ────────────────────────────────────────────────────── */
@@ -311,9 +325,6 @@ input[type="range"].vertical {
 /* ── Clarity legend ───────────────────────────────────────────────────────── */
 
 #clarity-legend {
-  position: fixed;
-  top: 120px; left: 12px;
-  z-index: 50;
   background: rgba(232, 244, 248, 0.92);
   border: 1px solid #b0cfe0;
   border-radius: 10px;
@@ -321,6 +332,7 @@ input[type="range"].vertical {
   font-family: 'Inter', sans-serif;
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 8px rgba(0,80,140,0.1);
+  display: inline-block;
 }
 
 .legend-title {
