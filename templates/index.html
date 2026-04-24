@@ -10,9 +10,17 @@
 <body>
 
   <div id="map"></div>
-  <button id="grid-toggle" onclick="toggleGrid()">Clarity layer: ON</button>
-  <button id="satellite-toggle" onclick="toggleSatellite()">Satellite</button>
-  <button id="beaches-toggle" onclick="toggleBeaches()">Beaches: ON</button>
+  <div id="layers-box">
+    <button id="layers-header" onclick="toggleLayersBox()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      Layers<span id="layers-chevron">▾</span>
+    </button>
+    <div id="layers-panel">
+      <label class="layer-row"><input type="checkbox" id="chk-clarity" checked onchange="toggleGrid()"> Clarity layer</label>
+      <label class="layer-row"><input type="checkbox" id="chk-satellite" onchange="toggleSatellite()"> Satellite</label>
+      <label class="layer-row"><input type="checkbox" id="chk-beaches" checked onchange="toggleBeaches()"> Beaches</label>
+    </div>
+  </div>
 
   <div id="left-panel">
     <div id="stats-bar">
@@ -22,7 +30,7 @@
         <div id="stats-count"></div>
       </div>
       <div id="chart-panel">
-        <canvas id="clarity-chart" height="100"></canvas>
+        <canvas id="clarity-chart" height="80"></canvas>
       </div>
     </div>
 
@@ -121,7 +129,7 @@
   govmapLayer.addTo(map);
 
   function toggleSatellite() {
-    satelliteVisible = !satelliteVisible;
+    satelliteVisible = document.getElementById('chk-satellite').checked;
     if (satelliteVisible) {
       map.removeLayer(govmapLayer);
       satelliteLayer.addTo(map);
@@ -129,8 +137,6 @@
       map.removeLayer(satelliteLayer);
       govmapLayer.addTo(map);
     }
-    document.getElementById('satellite-toggle').textContent =
-      satelliteVisible ? 'Map' : 'Satellite';
   }
 
   const markersLayer = L.layerGroup().addTo(map);
@@ -619,7 +625,7 @@
       let label;
       if (i === 0) label = 'Today';
       else if (i === 1) label = 'Yesterday';
-      else label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      else label = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;
       labels.push(label);
 
       if (dayFeatures.length === 0) {
@@ -653,20 +659,21 @@
       },
       options: {
         maintainAspectRatio: false,
-        layout: { padding: { top: 14 } },
+        layout: { padding: { top: 12 } },
         plugins: {
           legend: { display: false },
           datalabels: {
             anchor: 'end',
             align: 'top',
             formatter: v => v === null ? '' : Math.round(v) + 'm',
-            font: { size: 11, family: 'Inter', weight: '600' },
+            font: { size: 8, family: 'Inter', weight: '600' },
             color: '#1a4a6a',
             display: ctx => ctx.dataset.data[ctx.dataIndex] !== null,
           },
         },
+        datasets: { bar: { barThickness: 14 } },
         scales: {
-          x: { ticks: { font: { size: 8, family: 'Inter' }, color: '#4a7a9b' }, grid: { display: false } },
+          x: { ticks: { font: { size: 7, family: 'Inter' }, color: '#4a7a9b' }, grid: { display: false } },
           y: { display: false, min: 0, suggestedMax: yMax },
         },
         animation: { duration: 300 },
@@ -677,15 +684,13 @@
   // ── Clarity layer toggle ──────────────────────────────────────────────────────
 
   function toggleGrid() {
-    clarityLayerVisible = !clarityLayerVisible;
+    clarityLayerVisible = document.getElementById('chk-clarity').checked;
     if (clarityLayerVisible) {
       clarityHeatLayer.setFeatures(currentFiltered);
       clarityHeatLayer.addTo(map);
     } else {
       map.removeLayer(clarityHeatLayer);
     }
-    document.getElementById('grid-toggle').textContent =
-      `Clarity layer: ${clarityLayerVisible ? 'ON' : 'OFF'}`;
   }
 
   // ── Beach markers ─────────────────────────────────────────────────────────────
@@ -784,10 +789,15 @@
   }
 
   function toggleBeaches() {
-    beachesVisible = !beachesVisible;
+    beachesVisible = document.getElementById('chk-beaches').checked;
     beachesVisible ? beachLayer.addTo(map) : map.removeLayer(beachLayer);
-    document.getElementById('beaches-toggle').textContent =
-      `Beaches: ${beachesVisible ? 'ON' : 'OFF'}`;
+  }
+
+  let layersOpen = false;
+  function toggleLayersBox() {
+    layersOpen = !layersOpen;
+    document.getElementById('layers-panel').classList.toggle('open', layersOpen);
+    document.getElementById('layers-chevron').textContent = layersOpen ? '▴' : '▾';
   }
 
   async function init() {
