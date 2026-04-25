@@ -34,16 +34,6 @@
       </div>
     </div>
 
-    <div id="reports-filter">
-      <div id="filter-label">Show reports <span id="filter-count"></span></div>
-      <div id="stats-buttons">
-        <button class="stats-btn" onclick="setWindow('today', this)">Today</button>
-        <button class="stats-btn active" onclick="setWindow(24, this)">24h</button>
-        <button class="stats-btn" onclick="setWindow(48, this)">48h</button>
-        <button class="stats-btn" onclick="setWindow(168, this)">7d</button>
-      </div>
-    </div>
-
     <div id="clarity-legend">
       <div class="legend-title">Clarity</div>
       <div class="legend-inner">
@@ -57,6 +47,30 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="timeline-box">
+    <div id="timeline-panel" class="open">
+      <div class="tl-section-label">Show reports <span id="filter-count"></span></div>
+      <div id="stats-buttons">
+        <button class="stats-btn" onclick="setWindow('today', this)">Today</button>
+        <button class="stats-btn active" onclick="setWindow(24, this)">24h</button>
+        <button class="stats-btn" onclick="setWindow(48, this)">48h</button>
+        <button class="stats-btn" onclick="setWindow(168, this)">7d</button>
+      </div>
+      <div class="tl-divider"></div>
+      <div class="tl-section-label">Timeline replay</div>
+      <div id="replay-time-display">— press play —</div>
+      <input type="range" id="replay-slider" min="0" max="0" value="0" oninput="seekTimeline(+this.value)">
+      <div id="replay-controls">
+        <button id="replay-play-btn" class="stats-btn" onclick="startReplay()">▶ Play</button>
+        <button id="replay-stop-btn" class="stats-btn" onclick="stopReplay()" disabled>■ Stop</button>
+      </div>
+    </div>
+    <button id="timeline-toggle-btn" onclick="toggleTimelineBox()" title="Reports &amp; Replay">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Reports &amp; Replay<span id="timeline-chevron">▴</span>
+    </button>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -534,6 +548,30 @@
     return new Date(Date.now() - window * 3600 * 1000);
   }
 
+  function makeMarker(f) {
+    const [lon, lat] = f.geometry.coordinates;
+    const p = f.properties;
+    const clarity = parseFloat(p.clarity_m) || 0;
+    const myTokens = JSON.parse(localStorage.getItem('clarity_tokens') || '{}');
+    const canDelete = p.submitted_at && myTokens[p.submitted_at];
+    return L.circleMarker([lat, lon], {
+      radius: 8,
+      color: clarityColor(clarity),
+      fillColor: clarityColor(clarity),
+      fillOpacity: clarityOpacity(clarity),
+      weight: 1.5,
+    })
+    .bindPopup(`
+      <b>${p.beach}</b><br>
+      Clarity: <b>${clarity} m</b><br>
+      Depth: ${p.depth_m} m<br>
+      Diver: ${p.username}<br>
+      ${p.dive_datetime ? p.dive_datetime.split('T')[1]?.slice(0, 5) ?? p.dive_datetime : ''}
+      ${canDelete ? `<br><button onclick="deleteReport('${p.submitted_at}')" style="margin-top:6px;font-size:0.75rem;color:#c0392b;background:none;border:1px solid #c0392b;border-radius:4px;padding:2px 8px;cursor:pointer;">Delete my report</button>` : ''}
+    `)
+    .addTo(markersLayer);
+  }
+
   function applyWindow(window) {
     const cutoff = getCutoff(window);
     const filtered = allFeatures.filter(f => {
@@ -542,30 +580,8 @@
     });
     currentFiltered = filtered;
 
-    const myTokens = JSON.parse(localStorage.getItem('clarity_tokens') || '{}');
     markersLayer.clearLayers();
-    filtered.forEach(f => {
-      const [lon, lat] = f.geometry.coordinates;
-      const p = f.properties;
-      const clarity = parseFloat(p.clarity_m) || 0;
-      const canDelete = p.submitted_at && myTokens[p.submitted_at];
-      L.circleMarker([lat, lon], {
-        radius: 8,
-        color: clarityColor(clarity),
-        fillColor: clarityColor(clarity),
-        fillOpacity: clarityOpacity(clarity),
-        weight: 1.5,
-      })
-      .bindPopup(`
-        <b>${p.beach}</b><br>
-        Clarity: <b>${clarity} m</b><br>
-        Depth: ${p.depth_m} m<br>
-        Diver: ${p.username}<br>
-        ${p.dive_datetime ? p.dive_datetime.split('T')[1]?.slice(0, 5) ?? p.dive_datetime : ''}
-        ${canDelete ? `<br><button onclick="deleteReport('${p.submitted_at}')" style="margin-top:6px;font-size:0.75rem;color:#c0392b;background:none;border:1px solid #c0392b;border-radius:4px;padding:2px 8px;cursor:pointer;">Delete my report</button>` : ''}
-      `)
-      .addTo(markersLayer);
-    });
+    filtered.forEach(f => makeMarker(f));
 
     const countEl = document.getElementById('filter-count');
     if (countEl) countEl.textContent = filtered.length ? `(${filtered.length})` : '';
@@ -600,7 +616,115 @@
     currentWindow = window;
     document.querySelectorAll('.stats-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    if (replayTimer) stopReplay();
     applyWindow(window);
+  }
+
+  // ── Timeline replay ───────────────────────────────────────────────────────
+
+  let replayFeatures = [];
+  let replayIndex = 0;
+  let replayTimer = null;
+  let timelineBoxOpen = true;
+
+  function toggleTimelineBox() {
+    timelineBoxOpen = !timelineBoxOpen;
+    if (!timelineBoxOpen && replayTimer) stopReplay();
+    document.getElementById('timeline-panel').classList.toggle('open', timelineBoxOpen);
+    document.getElementById('timeline-chevron').textContent = timelineBoxOpen ? '▴' : '▾';
+  }
+
+  function replayDay(f) {
+    const dt = f.properties.dive_datetime;
+    if (!dt) return null;
+    const d = new Date(dt);
+    return isNaN(d) ? null : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function fmtReplayTime(isoStr) {
+    if (!isoStr) return '—';
+    const d = new Date(isoStr);
+    const day = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${dd}/${mo}  ${hh}:${mm}`;
+  }
+
+  function startReplay() {
+    if (replayTimer) { pauseReplay(); return; }
+
+    // First play: initialise from scratch. Resume after pause: just restart the interval.
+    if (!replayFeatures.length) {
+      if (!currentFiltered.length) { showToast('No reports in this window'); return; }
+      replayFeatures = [...currentFiltered].sort((a, b) =>
+        new Date(a.properties.dive_datetime) - new Date(b.properties.dive_datetime)
+      );
+      replayIndex = 0;
+      markersLayer.clearLayers();
+      if (clarityLayerVisible) clarityHeatLayer.setFeatures([]);
+
+      const slider = document.getElementById('replay-slider');
+      slider.max = replayFeatures.length - 1;
+      slider.value = 0;
+
+      if (map.hasLayer(beachLayer)) map.removeLayer(beachLayer);
+    }
+
+    document.getElementById('replay-play-btn').textContent = '⏸ Pause';
+    document.getElementById('replay-stop-btn').disabled = false;
+
+    stepReplay();
+    replayTimer = setInterval(stepReplay, 1000);
+  }
+
+  function pauseReplay() {
+    clearInterval(replayTimer);
+    replayTimer = null;
+    document.getElementById('replay-play-btn').textContent = '▶ Play';
+  }
+
+  function stepReplay() {
+    if (replayIndex >= replayFeatures.length) { stopReplay(); return; }
+    const f = replayFeatures[replayIndex];
+    const day = replayDay(f);
+    if (replayIndex > 0 && replayDay(replayFeatures[replayIndex - 1]) !== day) {
+      markersLayer.clearLayers();
+      if (clarityLayerVisible) clarityHeatLayer.setFeatures([]);
+    }
+    makeMarker(f);
+    if (clarityLayerVisible) {
+      const shown = replayFeatures.slice(0, replayIndex + 1).filter(r => replayDay(r) === day);
+      clarityHeatLayer.setFeatures(shown);
+    }
+    document.getElementById('replay-time-display').textContent = fmtReplayTime(f.properties.dive_datetime);
+    document.getElementById('replay-slider').value = replayIndex;
+    replayIndex++;
+  }
+
+  function stopReplay() {
+    clearInterval(replayTimer);
+    replayTimer = null;
+    replayFeatures = [];
+    replayIndex = 0;
+    document.getElementById('replay-play-btn').textContent = '▶ Play';
+    document.getElementById('replay-stop-btn').disabled = true;
+    updateBeachVisibility();
+    applyWindow(currentWindow);
+  }
+
+  function seekTimeline(idx) {
+    replayIndex = idx;
+    markersLayer.clearLayers();
+    const day = replayFeatures[idx] ? replayDay(replayFeatures[idx]) : null;
+    const shown = replayFeatures.slice(0, idx + 1).filter(f => replayDay(f) === day);
+    shown.forEach(f => makeMarker(f));
+    if (clarityLayerVisible) clarityHeatLayer.setFeatures(shown);
+    if (replayFeatures[idx]) {
+      document.getElementById('replay-time-display').textContent = fmtReplayTime(replayFeatures[idx].properties.dive_datetime);
+    }
+    if (!replayTimer) replayIndex = idx + 1;
   }
 
   // ── 5-day clarity chart (always visible) ─────────────────────────────────────

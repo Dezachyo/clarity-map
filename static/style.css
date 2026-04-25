@@ -244,29 +244,70 @@ input[type="range"].vertical {
   border-top: 1px solid #b0cfe0;
 }
 
-/* ── Show reports filter box ──────────────────────────────────────────────── */
+/* ── Timeline / reports combined box (bottom-right) ──────────────────────── */
 
-#reports-filter {
-  background: rgba(232, 244, 248, 0.92);
-  border: 1px solid #b0cfe0;
-  border-radius: 10px;
-  padding: 5px 8px;
+#timeline-box {
+  position: fixed;
+  bottom: 30px; right: 12px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
   font-family: 'Inter', sans-serif;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgba(0,80,140,0.1);
-  width: 140px;
 }
 
-#filter-label {
+#timeline-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.65rem;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  color: #4a7a9b;
+  background: rgba(232, 244, 248, 0.92);
+  border: 1px solid #b0cfe0;
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,80,140,0.1);
+  transition: background 0.12s, color 0.12s;
+}
+
+#timeline-toggle-btn:hover { background: rgba(255,255,255,0.9); }
+
+#timeline-chevron { margin-left: 2px; font-size: 0.6rem; }
+
+#timeline-panel {
+  display: none;
+  flex-direction: column;
+  gap: 7px;
+  background: rgba(232, 244, 248, 0.95);
+  border: 1px solid #b0cfe0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,80,140,0.1);
+  width: 170px;
+}
+
+#timeline-panel.open { display: flex; }
+
+.tl-section-label {
   font-size: 0.58rem;
   font-weight: 500;
   color: #4a7a9b;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 5px;
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.tl-divider {
+  border-top: 1px solid #b0cfe0;
+  margin: 2px 0;
 }
 
 #filter-count {
@@ -473,6 +514,33 @@ input[type="range"].vertical {
 }
 
 .hidden { display: none !important; }
+
+/* ── Replay controls (inside timeline panel) ──────────────────────────────── */
+
+#replay-time-display {
+  font-size: 0.65rem;
+  font-family: 'Courier New', monospace;
+  color: #0074D9;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-height: 1.2em;
+}
+
+#replay-slider {
+  width: 100%;
+  accent-color: #0074D9;
+  cursor: pointer;
+  margin: 0;
+}
+
+#replay-controls {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+#replay-stop-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Attribution ──────────────────────────────────────────────────────────── */
 
